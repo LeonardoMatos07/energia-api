@@ -1,8 +1,3 @@
-"""Small in-process TTL cache for public read endpoints.
-
-Per instance: each API task keeps its own copy. `/v1/admin/revalidar` clears it.
-"""
-
 import threading
 import time
 from collections import OrderedDict
@@ -55,7 +50,6 @@ def get_cache(request: Request) -> TTLCache:
 
 
 def public_cache(request: Request, response: Response) -> "PublicCache":
-    """Dependency for public GETs: sets Cache-Control and returns a request-scoped cache helper."""
     response.headers["Cache-Control"] = PUBLIC_CACHE_CONTROL
     return PublicCache(get_cache(request), request)
 

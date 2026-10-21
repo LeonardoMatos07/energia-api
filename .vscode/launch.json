@@ -15,8 +15,8 @@
         "--reload"
       ],
       "env": {
-        "AMBIENTE": "local",
-        "AUTH_DESATIVADA": "true"
+        "ENVIRONMENT": "local",
+        "AUTH_DISABLED": "true"
       },
       "cwd": "${workspaceFolder}",
       "justMyCode": true

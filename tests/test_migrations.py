@@ -1,5 +1,3 @@
-"""Migration checks (Postgres only: set TEST_DATABASE_URL)."""
-
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -12,15 +10,15 @@ pytestmark = pytest.mark.skipif(
 )
 
 TABLES = {
-    "usina",
-    "curtailment_mensal_usina",
-    "curtailment_mensal_uf",
-    "curtailment_mensal_sin",
-    "carga_execucao",
-    "relatorio_mensal",
-    "assinante_newsletter",
-    "organizacao",
-    "usuario",
+    "plant",
+    "plant_monthly_curtailment",
+    "state_monthly_curtailment",
+    "subsystem_monthly_curtailment",
+    "load_run",
+    "monthly_report",
+    "newsletter_subscriber",
+    "organization",
+    "app_user",
 }
 
 
@@ -38,4 +36,4 @@ def test_downgrade_upgrade_roundtrip_and_no_drift(pg_engine: Engine) -> None:
     assert TABLES.isdisjoint(inspect(pg_engine).get_table_names(schema="public"))
     command.upgrade(config, "head")
     assert set(inspect(pg_engine).get_table_names(schema="public")) >= TABLES
-    command.check(config)  # raises if models and migrations diverge
+    command.check(config)

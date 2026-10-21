@@ -1,5 +1,3 @@
-"""Alembic environment. Only the `public` schema is managed; other schemas are ignored."""
-
 from logging.config import fileConfig
 from typing import Any
 
@@ -15,8 +13,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# Objects created by the migration but not modelled in the ORM.
-UNMODELLED = {"ix_usina_nome_trgm"}
+UNMODELLED = {"ix_plant_name_trgm"}
 
 
 def database_url() -> str:

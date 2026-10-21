@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM python:3.12.14-slim-trixie AS build
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
@@ -29,5 +28,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
 USER app
 EXPOSE 8000
 
-# Migrations run as a separate one-off task: `alembic upgrade head`.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

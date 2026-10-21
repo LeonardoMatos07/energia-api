@@ -1,5 +1,3 @@
-"""E-mail sending behind a small interface: Amazon SES in prod, logging locally."""
-
 import logging
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -22,10 +20,8 @@ class EmailSender(Protocol):
 
 
 class ConsoleEmailSender:
-    """Local backend: writes the message (including links) to the log."""
-
     def send(self, message: EmailMessage) -> None:
-        logger.info("e-mail para %s | %s\n%s", message.to, message.subject, message.text)
+        logger.info("e-mail to %s | %s\n%s", message.to, message.subject, message.text)
 
 
 class SesEmailSender:
@@ -54,14 +50,13 @@ class SesEmailSender:
 
 
 def make_email_sender(settings: Settings) -> EmailSender:
-    if settings.AMBIENTE == "prod":
-        return SesEmailSender(settings.EMAIL_REMETENTE, settings.SES_REGION)
+    if settings.ENVIRONMENT == "prod":
+        return SesEmailSender(settings.EMAIL_SENDER, settings.SES_REGION)
     return ConsoleEmailSender()
 
 
 def send_safely(sender: EmailSender, message: EmailMessage) -> None:
-    """Background-task wrapper: failures are logged, never surfaced to the subscriber."""
     try:
         sender.send(message)
     except Exception:
-        logger.exception("falha ao enviar e-mail para %s", message.to)
+        logger.exception("failed to send e-mail to %s", message.to)

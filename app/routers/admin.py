@@ -12,19 +12,17 @@ from app.auth import AdminDep
 from app.cache import TTLCache
 from app.config import Settings
 from app.db import SessionDep
-from app.models import CargaExecucao, RelatorioMensal
+from app.models import LoadRun, MonthlyReport
 from app.schemas import (
-    CargaExecucao as CargaExecucaoSchema,
-)
-from app.schemas import (
-    CargasResposta,
-    RelatorioAdmin,
-    RelatorioEntrada,
-    RelatoriosAdminResposta,
-    RevalidarEntrada,
-    RevalidarResposta,
+    AdminReport,
+    AdminReportListResponse,
+    LoadRunListResponse,
+    ReportInput,
+    RevalidateInput,
+    RevalidateResponse,
     RevalidateTag,
 )
+from app.schemas import LoadRun as LoadRunSchema
 
 logger = logging.getLogger(__name__)
 
@@ -33,67 +31,64 @@ router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
 def slugify(value: str) -> str:
     ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", "-", ascii_value.lower()).strip("-") or "relatorio"
+    return re.sub(r"[^a-z0-9]+", "-", ascii_value.lower()).strip("-") or "report"
 
 
-@router.get("/cargas", response_model=CargasResposta)
-def list_cargas(
+@router.get("/load-runs", response_model=LoadRunListResponse)
+def list_load_runs(
     _admin: AdminDep,
     session: SessionDep,
-    limite: Annotated[int, Query(ge=1, le=500)] = 50,
-) -> CargasResposta:
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+) -> LoadRunListResponse:
     rows = session.scalars(
-        select(CargaExecucao)
-        .order_by(CargaExecucao.inicio.desc(), CargaExecucao.id.desc())
-        .limit(limite)
+        select(LoadRun).order_by(LoadRun.started_at.desc(), LoadRun.id.desc()).limit(limit)
     ).all()
-    return CargasResposta(itens=[CargaExecucaoSchema.model_validate(r) for r in rows])
+    return LoadRunListResponse(items=[LoadRunSchema.model_validate(r) for r in rows])
 
 
-@router.get("/relatorios", response_model=RelatoriosAdminResposta)
-def list_all_relatorios(_admin: AdminDep, session: SessionDep) -> RelatoriosAdminResposta:
+@router.get("/reports", response_model=AdminReportListResponse)
+def list_all_reports(_admin: AdminDep, session: SessionDep) -> AdminReportListResponse:
     rows = session.scalars(
-        select(RelatorioMensal).order_by(RelatorioMensal.mes.desc(), RelatorioMensal.id.desc())
+        select(MonthlyReport).order_by(MonthlyReport.month.desc(), MonthlyReport.id.desc())
     ).all()
-    return RelatoriosAdminResposta(itens=[RelatorioAdmin.model_validate(r) for r in rows])
+    return AdminReportListResponse(items=[AdminReport.model_validate(r) for r in rows])
 
 
-@router.post("/relatorios", response_model=RelatorioAdmin)
-def upsert_relatorio(
-    body: RelatorioEntrada, admin: AdminDep, session: SessionDep, request: Request
-) -> RelatorioAdmin:
-    slug = body.slug or slugify(body.titulo)
+@router.post("/reports", response_model=AdminReport)
+def upsert_report(
+    body: ReportInput, admin: AdminDep, session: SessionDep, request: Request
+) -> AdminReport:
+    slug = body.slug or slugify(body.title)
     now = datetime.now(UTC)
-    row = session.scalars(select(RelatorioMensal).where(RelatorioMensal.slug == slug)).first()
+    row = session.scalars(select(MonthlyReport).where(MonthlyReport.slug == slug)).first()
     if row is None:
-        row = RelatorioMensal(slug=slug, criado_em=now)
+        row = MonthlyReport(slug=slug, created_at=now)
         session.add(row)
-    row.mes = body.mes
-    row.titulo = body.titulo
-    row.resumo = body.resumo
-    row.conteudo = body.conteudo
-    row.atualizado_em = now
-    if body.publicar:
-        row.publicado_em = row.publicado_em or now  # keep the original publication date
+    row.month = body.month
+    row.title = body.title
+    row.summary = body.summary
+    row.content = body.content
+    row.updated_at = now
+    if body.publish:
+        row.published_at = row.published_at or now
     else:
-        row.publicado_em = None
+        row.published_at = None
     session.commit()
     session.refresh(row)
     cache: TTLCache = request.app.state.cache
     cache.clear()
-    logger.info("relatório %s salvo por %s (%s)", slug, admin.subject, admin.kind)
-    return RelatorioAdmin.model_validate(row)
+    logger.info("report %s saved by %s (%s)", slug, admin.subject, admin.kind)
+    return AdminReport.model_validate(row)
 
 
 def notify_web(
     settings: Settings, tags: list[RevalidateTag], transport: httpx.BaseTransport | None = None
 ) -> tuple[bool, str | None]:
-    """POSTs the tags to energia-web. Returns (reached, error detail)."""
     if not settings.REVALIDATE_SECRET:
-        return False, "REVALIDATE_SECRET não configurado; energia-web não foi chamado."
-    url = f"{settings.web_url}/api/revalidar"
+        return False, "REVALIDATE_SECRET is not set; energia-web was not called."
+    url = f"{settings.web_url}/api/revalidate"
     try:
-        with httpx.Client(timeout=settings.REVALIDATE_TIMEOUT_SEGUNDOS, transport=transport) as c:
+        with httpx.Client(timeout=settings.REVALIDATE_TIMEOUT_SECONDS, transport=transport) as c:
             response = c.post(
                 url,
                 json={"tags": tags},
@@ -101,25 +96,25 @@ def notify_web(
             )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        logger.warning("falha ao revalidar o energia-web (%s): %s", url, exc)
-        return False, f"falha ao chamar o energia-web: {type(exc).__name__}"
+        logger.warning("failed to revalidate energia-web (%s): %s", url, exc)
+        return False, f"failed to call energia-web: {type(exc).__name__}"
     return True, None
 
 
-@router.post("/revalidar", response_model=RevalidarResposta)
-def revalidar(
-    admin: AdminDep, request: Request, body: RevalidarEntrada | None = None
-) -> RevalidarResposta:
-    tags = (body or RevalidarEntrada()).tags
+@router.post("/revalidate", response_model=RevalidateResponse)
+def revalidate(
+    admin: AdminDep, request: Request, body: RevalidateInput | None = None
+) -> RevalidateResponse:
+    tags = (body or RevalidateInput()).tags
     cache: TTLCache = request.app.state.cache
     removed = cache.clear()
     settings: Settings = request.app.state.settings
     reached, detail = notify_web(settings, tags, request.app.state.web_transport)
-    logger.info("revalidação %s por %s: web=%s", tags, admin.subject, reached)
-    return RevalidarResposta(
+    logger.info("revalidation %s by %s: web=%s", tags, admin.subject, reached)
+    return RevalidateResponse(
         tags=tags,
-        cache_limpo=True,
-        entradas_removidas=removed,
-        web_revalidado=reached,
-        detalhe=detail,
+        cache_cleared=True,
+        entries_removed=removed,
+        web_revalidated=reached,
+        detail=detail,
     )

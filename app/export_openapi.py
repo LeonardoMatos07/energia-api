@@ -1,10 +1,3 @@
-"""Exports the OpenAPI schema (used by energia-web to generate TypeScript types).
-
-Usage:
-    uv run python -m app.export_openapi openapi.json   # writes the file (UTF-8)
-    uv run python -m app.export_openapi                # prints to stdout
-"""
-
 import json
 import sys
 from typing import Any
@@ -15,8 +8,7 @@ from app.config import Settings
 def build_schema() -> dict[str, Any]:
     from app.main import create_app
 
-    # Fixed local settings so the output does not depend on the environment.
-    app = create_app(Settings(_env_file=None, AMBIENTE="local"))
+    app = create_app(Settings(_env_file=None, ENVIRONMENT="local"))
     return app.openapi()
 
 

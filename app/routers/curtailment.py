@@ -5,83 +5,122 @@ from sqlalchemy import select
 
 from app.cache import PublicCacheDep
 from app.db import SessionDep
-from app.models import CurtailmentMensalSin, CurtailmentMensalUf
-from app.queries import latest_usina_month, plant_ranking
+from app.models import StateMonthlyCurtailment, SubsystemMonthlyCurtailment
+from app.queries import latest_plant_month, plant_ranking
 from app.schemas import (
-    MES_PATTERN,
-    CurtailmentSin,
-    CurtailmentUf,
-    FonteAgregada,
-    SinResposta,
-    UfResposta,
-    parse_mes,
+    MONTH_PATTERN,
+    AggregateSource,
+    StateCurtailment,
+    StateCurtailmentResponse,
+    SubsystemCurtailment,
+    SubsystemCurtailmentResponse,
+    SubsystemOrSin,
+    parse_month,
 )
 
 router = APIRouter(prefix="/v1/curtailment", tags=["curtailment"])
 
-# fmt: off
-UFS = frozenset({
-    "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
-    "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
-})
-# fmt: on
-RANKING_UF_LIMIT = 20
+STATES = frozenset(
+    {
+        "AC",
+        "AL",
+        "AM",
+        "AP",
+        "BA",
+        "CE",
+        "DF",
+        "ES",
+        "GO",
+        "MA",
+        "MG",
+        "MS",
+        "MT",
+        "PA",
+        "PB",
+        "PE",
+        "PI",
+        "PR",
+        "RJ",
+        "RN",
+        "RO",
+        "RR",
+        "RS",
+        "SC",
+        "SE",
+        "SP",
+        "TO",
+    }
+)
+STATE_RANKING_LIMIT = 20
 
-MesQuery = Annotated[str | None, Query(pattern=MES_PATTERN, examples=["2026-09"])]
+MonthQuery = Annotated[str | None, Query(pattern=MONTH_PATTERN, examples=["2026-09"])]
 
 
-@router.get("/sin", response_model=SinResposta)
-def curtailment_sin(
+@router.get("/subsystems", response_model=SubsystemCurtailmentResponse)
+def subsystem_curtailment(
     session: SessionDep,
     cache: PublicCacheDep,
-    fonte: FonteAgregada = "total",
-    inicio: MesQuery = None,
-    fim: MesQuery = None,
-) -> SinResposta:
-    def load() -> SinResposta:
+    source: AggregateSource = "total",
+    start: MonthQuery = None,
+    end: MonthQuery = None,
+    subsystem: Annotated[
+        SubsystemOrSin | None,
+        Query(description="Optional; without it, every subsystem and the SIN total."),
+    ] = None,
+) -> SubsystemCurtailmentResponse:
+    def load() -> SubsystemCurtailmentResponse:
         stmt = (
-            select(CurtailmentMensalSin)
-            .where(CurtailmentMensalSin.fonte == fonte)
-            .order_by(CurtailmentMensalSin.mes, CurtailmentMensalSin.subsistema)
+            select(SubsystemMonthlyCurtailment)
+            .where(SubsystemMonthlyCurtailment.source == source)
+            .order_by(SubsystemMonthlyCurtailment.month, SubsystemMonthlyCurtailment.subsystem)
         )
-        if inicio is not None:
-            stmt = stmt.where(CurtailmentMensalSin.mes >= parse_mes(inicio))
-        if fim is not None:
-            stmt = stmt.where(CurtailmentMensalSin.mes <= parse_mes(fim))
+        if start is not None:
+            stmt = stmt.where(SubsystemMonthlyCurtailment.month >= parse_month(start))
+        if end is not None:
+            stmt = stmt.where(SubsystemMonthlyCurtailment.month <= parse_month(end))
+        if subsystem is not None:
+            stmt = stmt.where(SubsystemMonthlyCurtailment.subsystem == subsystem)
         rows = session.scalars(stmt).all()
-        return SinResposta(itens=[CurtailmentSin.model_validate(r) for r in rows])
+        return SubsystemCurtailmentResponse(
+            items=[SubsystemCurtailment.model_validate(r) for r in rows]
+        )
 
     return cache.get_or_set(load)
 
 
-@router.get("/uf/{uf}", response_model=UfResposta)
-def curtailment_uf(
+@router.get("/states/{state}", response_model=StateCurtailmentResponse)
+def state_curtailment(
     session: SessionDep,
     cache: PublicCacheDep,
-    uf: Annotated[str, Path(pattern=r"^[A-Za-z]{2}$")],
-    fonte: FonteAgregada = "total",
-    mes: MesQuery = None,
-) -> UfResposta:
-    uf = uf.upper()
-    if uf not in UFS:
-        raise HTTPException(status_code=404, detail="UF não encontrada.")
+    state: Annotated[str, Path(pattern=r"^[A-Za-z]{2}$")],
+    source: AggregateSource = "total",
+    month: MonthQuery = None,
+) -> StateCurtailmentResponse:
+    state = state.upper()
+    if state not in STATES:
+        raise HTTPException(status_code=404, detail="State not found.")
 
-    def load() -> UfResposta:
+    def load() -> StateCurtailmentResponse:
         rows = session.scalars(
-            select(CurtailmentMensalUf)
-            .where(CurtailmentMensalUf.uf == uf, CurtailmentMensalUf.fonte == fonte)
-            .order_by(CurtailmentMensalUf.mes)
+            select(StateMonthlyCurtailment)
+            .where(
+                StateMonthlyCurtailment.state == state,
+                StateMonthlyCurtailment.source == source,
+            )
+            .order_by(StateMonthlyCurtailment.month)
         ).all()
-        mes_ranking = parse_mes(mes) if mes is not None else latest_usina_month(session, uf)
+        ranking_month = (
+            parse_month(month) if month is not None else latest_plant_month(session, state)
+        )
         ranking = (
-            plant_ranking(session, mes_ranking, uf, fonte, RANKING_UF_LIMIT)
-            if mes_ranking is not None
+            plant_ranking(session, ranking_month, state, source, STATE_RANKING_LIMIT)
+            if ranking_month is not None
             else []
         )
-        return UfResposta(
-            serie=[CurtailmentUf.model_validate(r) for r in rows],
+        return StateCurtailmentResponse(
+            series=[StateCurtailment.model_validate(r) for r in rows],
             ranking=ranking,
-            mes_ranking=mes_ranking,
+            ranking_month=ranking_month,
         )
 
     return cache.get_or_set(load)

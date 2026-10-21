@@ -1,8 +1,3 @@
-"""ORM models. This module is the source of truth for the schema; Alembic migrations mirror it.
-
-Types are kept portable (Postgres in production, SQLite allowed in tests).
-"""
-
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -35,7 +30,6 @@ NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s",
 }
 
-# bigint identity in Postgres; plain INTEGER PRIMARY KEY (rowid alias) in SQLite.
 BigIntId = BigInteger().with_variant(Integer(), "sqlite")
 
 
@@ -47,188 +41,182 @@ def _now_default() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
-class Usina(Base):
-    __tablename__ = "usina"
+class Plant(Base):
+    __tablename__ = "plant"
     __table_args__ = (
-        CheckConstraint("tipo IN ('usina', 'conjunto')", name="tipo"),
-        CheckConstraint("fonte IN ('eolica', 'solar')", name="fonte"),
-        CheckConstraint("subsistema IN ('N', 'NE', 'S', 'SE')", name="subsistema"),
-        CheckConstraint("length(uf) = 2 AND uf = upper(uf)", name="uf"),
-        Index("ix_usina_uf_fonte", "uf", "fonte"),
-        Index("ix_usina_conjunto_id", "conjunto_id"),
+        CheckConstraint("kind IN ('plant', 'cluster')", name="kind"),
+        CheckConstraint("source IN ('wind', 'solar')", name="source"),
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),
+        CheckConstraint("length(state) = 2 AND state = upper(state)", name="state"),
+        Index("ix_plant_state_source", "state", "source"),
+        Index("ix_plant_cluster_id", "cluster_id"),
     )
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
-    tipo: Mapped[str] = mapped_column(Text, nullable=False)
-    nome: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    fonte: Mapped[str] = mapped_column(Text, nullable=False)
-    uf: Mapped[str] = mapped_column(CHAR(2), nullable=False)
-    subsistema: Mapped[str] = mapped_column(String(3), nullable=False)
-    conjunto_id: Mapped[str | None] = mapped_column(Text, ForeignKey("usina.id"), nullable=True)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(CHAR(2), nullable=False)
+    subsystem: Mapped[str] = mapped_column(String(3), nullable=False)
+    cluster_id: Mapped[str | None] = mapped_column(Text, ForeignKey("plant.id"), nullable=True)
     ceg: Mapped[str | None] = mapped_column(Text)
-    potencia_mw: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
-    ponto_conexao: Mapped[str | None] = mapped_column(Text)
-    agente_operador: Mapped[str | None] = mapped_column(Text)
-    atualizado_em: Mapped[datetime] = _now_default()
+    capacity_mw: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    connection_point: Mapped[str | None] = mapped_column(Text)
+    operator: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = _now_default()
 
 
-# Name search uses lower(nome); the migration also adds a pg_trgm GIN index when available.
-Index("ix_usina_nome_lower", func.lower(Usina.nome))
+Index("ix_plant_name_lower", func.lower(Plant.name))
 
 
-class CurtailmentMensalUsina(Base):
-    __tablename__ = "curtailment_mensal_usina"
+class PlantMonthlyCurtailment(Base):
+    __tablename__ = "plant_monthly_curtailment"
     __table_args__ = (
         CheckConstraint(
-            "base_preco IS NULL OR base_preco IN ('PLD', 'CMO', 'PLD_FILLED', 'CMO_FILLED')",
-            name="base_preco",
+            "price_basis IS NULL OR price_basis IN ('PLD', 'CMO', 'PLD_FILLED', 'CMO_FILLED')",
+            name="price_basis",
         ),
-        Index("ix_curtailment_mensal_usina_mes_posicao_nacional", "mes", "posicao_nacional"),
-        Index("ix_curtailment_mensal_usina_mes_posicao_uf", "mes", "posicao_uf"),
+        Index("ix_plant_monthly_curtailment_month_national_rank", "month", "national_rank"),
+        Index("ix_plant_monthly_curtailment_month_state_rank", "month", "state_rank"),
     )
 
-    usina_id: Mapped[str] = mapped_column(Text, ForeignKey("usina.id"), primary_key=True)
-    mes: Mapped[date] = mapped_column(Date, primary_key=True)
-    geracao_verificada_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
-    energia_cortada_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
-    percentual_corte: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
-    corte_rel_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
-    corte_cnf_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
-    corte_ene_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
-    corte_outros_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
-    perda_estimada_brl: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
-    base_preco: Mapped[str | None] = mapped_column(Text)
-    horas_restritas: Mapped[Decimal] = mapped_column(Numeric(7, 1), nullable=False)
-    percentual_corte_medio_uf: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
-    posicao_nacional: Mapped[int | None] = mapped_column(Integer)
-    posicao_uf: Mapped[int | None] = mapped_column(Integer)
-    atualizado_em: Mapped[datetime] = _now_default()
+    plant_id: Mapped[str] = mapped_column(Text, ForeignKey("plant.id"), primary_key=True)
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    verified_generation_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    curtailed_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    curtailment_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    curtailed_rel_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    curtailed_cnf_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    curtailed_ene_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    curtailed_other_mwh: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    estimated_loss_brl: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    price_basis: Mapped[str | None] = mapped_column(Text)
+    restricted_hours: Mapped[Decimal] = mapped_column(Numeric(7, 1), nullable=False)
+    state_avg_curtailment_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    national_rank: Mapped[int | None] = mapped_column(Integer)
+    state_rank: Mapped[int | None] = mapped_column(Integer)
+    updated_at: Mapped[datetime] = _now_default()
 
 
 class _CurtailmentAggregate:
-    """Columns shared by the UF and SIN aggregates."""
-
-    fonte: Mapped[str] = mapped_column(Text, primary_key=True)
-    mes: Mapped[date] = mapped_column(Date, primary_key=True)
-    geracao_verificada_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
-    energia_cortada_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
-    percentual_corte: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
-    corte_rel_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
-    corte_cnf_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
-    corte_ene_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
-    corte_outros_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
-    perda_estimada_brl: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
-    usinas_afetadas: Mapped[int] = mapped_column(Integer, nullable=False)
-    atualizado_em: Mapped[datetime] = _now_default()
+    source: Mapped[str] = mapped_column(Text, primary_key=True)
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    verified_generation_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    curtailed_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    curtailment_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    curtailed_rel_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    curtailed_cnf_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    curtailed_ene_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    curtailed_other_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    estimated_loss_brl: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    affected_plants: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = _now_default()
 
 
-class CurtailmentMensalUf(_CurtailmentAggregate, Base):
-    __tablename__ = "curtailment_mensal_uf"
+class StateMonthlyCurtailment(_CurtailmentAggregate, Base):
+    __tablename__ = "state_monthly_curtailment"
     __table_args__ = (
-        CheckConstraint("fonte IN ('eolica', 'solar', 'total')", name="fonte"),
-        CheckConstraint("length(uf) = 2 AND uf = upper(uf)", name="uf"),
+        CheckConstraint("source IN ('wind', 'solar', 'total')", name="source"),
+        CheckConstraint("length(state) = 2 AND state = upper(state)", name="state"),
     )
 
-    uf: Mapped[str] = mapped_column(CHAR(2), primary_key=True)
+    state: Mapped[str] = mapped_column(CHAR(2), primary_key=True)
 
 
-class CurtailmentMensalSin(_CurtailmentAggregate, Base):
-    __tablename__ = "curtailment_mensal_sin"
+class SubsystemMonthlyCurtailment(_CurtailmentAggregate, Base):
+    __tablename__ = "subsystem_monthly_curtailment"
     __table_args__ = (
-        CheckConstraint("fonte IN ('eolica', 'solar', 'total')", name="fonte"),
-        CheckConstraint("subsistema IN ('N', 'NE', 'S', 'SE', 'SIN')", name="subsistema"),
+        CheckConstraint("source IN ('wind', 'solar', 'total')", name="source"),
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE', 'SIN')", name="subsystem"),
     )
 
-    subsistema: Mapped[str] = mapped_column(String(3), primary_key=True)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
 
 
-class CargaExecucao(Base):
-    __tablename__ = "carga_execucao"
-    __table_args__ = (
-        CheckConstraint("status IN ('em_andamento', 'sucesso', 'falha')", name="status"),
-    )
+class LoadRun(Base):
+    __tablename__ = "load_run"
+    __table_args__ = (CheckConstraint("status IN ('running', 'success', 'failed')", name="status"),)
 
     id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
     dataset: Mapped[str] = mapped_column(Text, nullable=False)
-    periodo: Mapped[date | None] = mapped_column(Date)
-    arquivo: Mapped[str | None] = mapped_column(Text)
-    hash: Mapped[str | None] = mapped_column(Text)
-    linhas: Mapped[int | None] = mapped_column(Integer)
-    inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    fim: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    period: Mapped[date | None] = mapped_column(Date)
+    source_file: Mapped[str | None] = mapped_column(Text)
+    checksum: Mapped[str | None] = mapped_column(Text)
+    row_count: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    detalhe: Mapped[str | None] = mapped_column(Text)
+    detail: Mapped[str | None] = mapped_column(Text)
 
 
-Index("ix_carga_execucao_inicio", CargaExecucao.inicio.desc())
+Index("ix_load_run_started_at", LoadRun.started_at.desc())
 
 
-class RelatorioMensal(Base):
-    __tablename__ = "relatorio_mensal"
+class MonthlyReport(Base):
+    __tablename__ = "monthly_report"
 
     id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
-    mes: Mapped[date] = mapped_column(Date, nullable=False)
-    titulo: Mapped[str] = mapped_column(Text, nullable=False)
+    month: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    resumo: Mapped[str | None] = mapped_column(Text)
-    conteudo: Mapped[str] = mapped_column(Text, nullable=False)
-    publicado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    criado_em: Mapped[datetime] = _now_default()
-    atualizado_em: Mapped[datetime] = _now_default()
+    summary: Mapped[str | None] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _now_default()
+    updated_at: Mapped[datetime] = _now_default()
 
 
-class AssinanteNewsletter(Base):
-    __tablename__ = "assinante_newsletter"
+class NewsletterSubscriber(Base):
+    __tablename__ = "newsletter_subscriber"
     __table_args__ = (
-        CheckConstraint("email = lower(email)", name="email_minusculo"),
-        Index("ix_assinante_newsletter_token_confirmacao_hash", "token_confirmacao_hash"),
-        Index("ix_assinante_newsletter_token_descadastro_hash", "token_descadastro_hash"),
+        CheckConstraint("email = lower(email)", name="email_lowercase"),
+        Index("ix_newsletter_subscriber_confirmation_token_hash", "confirmation_token_hash"),
+        Index("ix_newsletter_subscriber_unsubscribe_token_hash", "unsubscribe_token_hash"),
     )
 
     id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    consentimento_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    descadastrado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    token_confirmacao_hash: Mapped[str | None] = mapped_column(Text)
-    token_confirmacao_expira_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    token_descadastro_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    origem: Mapped[str | None] = mapped_column(Text)
-    criado_em: Mapped[datetime] = _now_default()
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmation_token_hash: Mapped[str | None] = mapped_column(Text)
+    confirmation_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    unsubscribe_token_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    signup_source: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now_default()
 
 
-class Organizacao(Base):
-    __tablename__ = "organizacao"
+class Organization(Base):
+    __tablename__ = "organization"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    nome: Mapped[str] = mapped_column(Text, nullable=False)
-    criado_em: Mapped[datetime] = _now_default()
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _now_default()
 
 
-class Usuario(Base):
-    __tablename__ = "usuario"
-    __table_args__ = (CheckConstraint("papel IN ('dono', 'membro', 'admin')", name="papel"),)
+class AppUser(Base):
+    __tablename__ = "app_user"
+    __table_args__ = (CheckConstraint("role IN ('owner', 'member', 'admin')", name="role"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     cognito_sub: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    nome: Mapped[str | None] = mapped_column(Text)
-    organizacao_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("organizacao.id"), nullable=True
+    name: Mapped[str | None] = mapped_column(Text)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("organization.id"), nullable=True
     )
-    papel: Mapped[str] = mapped_column(Text, nullable=False)
-    criado_em: Mapped[datetime] = _now_default()
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _now_default()
 
 
-# "mes" columns always hold the first day of the month (contract convention).
 for _name in (
-    "curtailment_mensal_usina",
-    "curtailment_mensal_uf",
-    "curtailment_mensal_sin",
-    "relatorio_mensal",
+    "plant_monthly_curtailment",
+    "state_monthly_curtailment",
+    "subsystem_monthly_curtailment",
+    "monthly_report",
 ):
     _table = Base.metadata.tables[_name]
     _table.append_constraint(
-        CheckConstraint(extract("day", _table.c.mes) == 1, name="mes_primeiro_dia")
+        CheckConstraint(extract("day", _table.c.month) == 1, name="month_first_day")
     )

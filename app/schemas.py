@@ -1,5 +1,3 @@
-"""Request/response models. Keys mirror the table columns (see docs/contrato-fase1.md)."""
-
 import re
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
@@ -14,36 +12,36 @@ from pydantic import (
     WithJsonSchema,
 )
 
-MES_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
-_MES_RE = re.compile(MES_PATTERN)
+MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+_MONTH_RE = re.compile(MONTH_PATTERN)
 
-Fonte = Literal["eolica", "solar"]
-FonteAgregada = Literal["eolica", "solar", "total"]
-Tipo = Literal["usina", "conjunto"]
-RevalidateTag = Literal["curtailment", "usinas", "relatorios"]
-ALL_TAGS: list[RevalidateTag] = ["curtailment", "usinas", "relatorios"]
+Source = Literal["wind", "solar"]
+AggregateSource = Literal["wind", "solar", "total"]
+Kind = Literal["plant", "cluster"]
+SubsystemOrSin = Literal["N", "NE", "S", "SE", "SIN"]
+RevalidateTag = Literal["curtailment", "plants", "reports"]
+ALL_TAGS: list[RevalidateTag] = ["curtailment", "plants", "reports"]
 
 
-def parse_mes(value: Any) -> date:
-    """Accepts `YYYY-MM` (API format) or a date (from the database)."""
+def parse_month(value: Any) -> date:
     if isinstance(value, datetime):
         value = value.date()
     if isinstance(value, date):
         return value.replace(day=1)
-    if isinstance(value, str) and _MES_RE.match(value):
+    if isinstance(value, str) and _MONTH_RE.match(value):
         return date(int(value[:4]), int(value[5:7]), 1)
-    raise ValueError("mês deve estar no formato YYYY-MM")
+    raise ValueError("month must use the YYYY-MM format")
 
 
-def format_mes(value: date) -> str:
+def format_month(value: date) -> str:
     return value.strftime("%Y-%m")
 
 
-Mes = Annotated[
+Month = Annotated[
     date,
-    BeforeValidator(parse_mes),
-    PlainSerializer(format_mes, return_type=str),
-    WithJsonSchema({"type": "string", "pattern": MES_PATTERN, "examples": ["2026-09"]}),
+    BeforeValidator(parse_month),
+    PlainSerializer(format_month, return_type=str),
+    WithJsonSchema({"type": "string", "pattern": MONTH_PATTERN, "examples": ["2026-09"]}),
 ]
 
 
@@ -51,208 +49,193 @@ class _Orm(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# --- curtailment -------------------------------------------------------------------------------
+class _CurtailmentAggregate(_Orm):
+    source: AggregateSource
+    month: Month
+    verified_generation_mwh: float
+    curtailed_mwh: float
+    curtailment_pct: float | None
+    curtailed_rel_mwh: float
+    curtailed_cnf_mwh: float
+    curtailed_ene_mwh: float
+    curtailed_other_mwh: float
+    estimated_loss_brl: float | None
+    affected_plants: int
+    updated_at: datetime
 
 
-class _CurtailmentAgregado(_Orm):
-    fonte: FonteAgregada
-    mes: Mes
-    geracao_verificada_mwh: float
-    energia_cortada_mwh: float
-    percentual_corte: float | None
-    corte_rel_mwh: float
-    corte_cnf_mwh: float
-    corte_ene_mwh: float
-    corte_outros_mwh: float
-    perda_estimada_brl: float | None
-    usinas_afetadas: int
-    atualizado_em: datetime
+class SubsystemCurtailment(_CurtailmentAggregate):
+    subsystem: str
 
 
-class CurtailmentSin(_CurtailmentAgregado):
-    subsistema: str
+class StateCurtailment(_CurtailmentAggregate):
+    state: str
 
 
-class CurtailmentUf(_CurtailmentAgregado):
-    uf: str
+class PlantCurtailment(_Orm):
+    plant_id: str
+    month: Month
+    verified_generation_mwh: float
+    curtailed_mwh: float
+    curtailment_pct: float | None
+    curtailed_rel_mwh: float
+    curtailed_cnf_mwh: float
+    curtailed_ene_mwh: float
+    curtailed_other_mwh: float
+    estimated_loss_brl: float | None
+    price_basis: str | None
+    restricted_hours: float
+    state_avg_curtailment_pct: float | None
+    national_rank: int | None
+    state_rank: int | None
+    updated_at: datetime
 
 
-class CurtailmentUsina(_Orm):
-    usina_id: str
-    mes: Mes
-    geracao_verificada_mwh: float
-    energia_cortada_mwh: float
-    percentual_corte: float | None
-    corte_rel_mwh: float
-    corte_cnf_mwh: float
-    corte_ene_mwh: float
-    corte_outros_mwh: float
-    perda_estimada_brl: float | None
-    base_preco: str | None
-    horas_restritas: float
-    percentual_corte_medio_uf: float | None
-    posicao_nacional: int | None
-    posicao_uf: int | None
-    atualizado_em: datetime
-
-
-# --- usinas ------------------------------------------------------------------------------------
-
-
-class UsinaResumo(_Orm):
+class PlantSummary(_Orm):
     id: str
-    tipo: Tipo
-    nome: str
+    kind: Kind
+    name: str
     slug: str
-    fonte: Fonte
-    uf: str
-    subsistema: str
-    potencia_mw: float | None
+    source: Source
+    state: str
+    subsystem: str
+    capacity_mw: float | None
 
 
-class Usina(UsinaResumo):
-    conjunto_id: str | None
+class Plant(PlantSummary):
+    cluster_id: str | None
     ceg: str | None
-    ponto_conexao: str | None
-    agente_operador: str | None
-    atualizado_em: datetime
+    connection_point: str | None
+    operator: str | None
+    updated_at: datetime
 
 
-class UsinaRanking(UsinaResumo):
-    posicao: int
-    energia_cortada_mwh: float
-    percentual_corte: float | None
-    perda_estimada_brl: float | None
+class RankedPlant(PlantSummary):
+    rank: int
+    curtailed_mwh: float
+    curtailment_pct: float | None
+    estimated_loss_brl: float | None
 
 
-class SinResposta(BaseModel):
-    itens: list[CurtailmentSin]
+class SubsystemCurtailmentResponse(BaseModel):
+    items: list[SubsystemCurtailment]
 
 
-class UfResposta(BaseModel):
-    serie: list[CurtailmentUf]
-    ranking: list[UsinaRanking]
-    mes_ranking: Mes | None
+class StateCurtailmentResponse(BaseModel):
+    series: list[StateCurtailment]
+    ranking: list[RankedPlant]
+    ranking_month: Month | None
 
 
-class UsinasResposta(BaseModel):
-    itens: list[UsinaResumo]
+class PlantListResponse(BaseModel):
+    items: list[PlantSummary]
     total: int
-    pagina: int
-    tamanho: int
+    page: int
+    page_size: int
 
 
-class UsinaDetalheResposta(BaseModel):
-    usina: Usina
-    conjunto: UsinaResumo | None
-    usinas_do_conjunto: list[UsinaResumo]
-    serie: list[CurtailmentUsina]
+class PlantDetailResponse(BaseModel):
+    plant: Plant
+    cluster: PlantSummary | None
+    cluster_plants: list[PlantSummary]
+    series: list[PlantCurtailment]
 
 
-class RankingResposta(BaseModel):
-    mes: Mes | None
-    itens: list[UsinaRanking]
+class RankingResponse(BaseModel):
+    month: Month | None
+    items: list[RankedPlant]
 
 
-class MesesResposta(BaseModel):
-    meses: list[Mes]
+class MonthsResponse(BaseModel):
+    months: list[Month]
 
 
-# --- relatórios --------------------------------------------------------------------------------
-
-
-class RelatorioResumo(_Orm):
-    mes: Mes
-    titulo: str
+class ReportSummary(_Orm):
+    month: Month
+    title: str
     slug: str
-    resumo: str | None
-    publicado_em: datetime | None
+    summary: str | None
+    published_at: datetime | None
 
 
-class Relatorio(RelatorioResumo):
-    conteudo: str
+class Report(ReportSummary):
+    content: str
 
 
-class RelatorioAdmin(Relatorio):
-    criado_em: datetime
-    atualizado_em: datetime
+class AdminReport(Report):
+    created_at: datetime
+    updated_at: datetime
 
 
-class RelatoriosResposta(BaseModel):
-    itens: list[RelatorioResumo]
+class ReportListResponse(BaseModel):
+    items: list[ReportSummary]
 
 
-class RelatoriosAdminResposta(BaseModel):
-    itens: list[RelatorioAdmin]
+class AdminReportListResponse(BaseModel):
+    items: list[AdminReport]
 
 
-class RelatorioEntrada(BaseModel):
-    mes: Mes
-    titulo: str = Field(min_length=1, max_length=300)
+class ReportInput(BaseModel):
+    month: Month
+    title: str = Field(min_length=1, max_length=300)
     slug: str | None = Field(
         default=None,
         pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
         max_length=200,
-        description="Opcional; se ausente, é gerado a partir do título.",
+        description="Optional; generated from the title when missing.",
     )
-    resumo: str | None = None
-    conteudo: str = Field(min_length=1)
-    publicar: bool
+    summary: str | None = None
+    content: str = Field(min_length=1)
+    publish: bool
 
 
-# --- newsletter --------------------------------------------------------------------------------
-
-
-class NewsletterEntrada(BaseModel):
+class NewsletterSignup(BaseModel):
     email: EmailStr = Field(max_length=254)
-    consentimento: Literal[True]
-    origem: str | None = Field(default=None, max_length=100)
+    consent: Literal[True]
+    source: str | None = Field(default=None, max_length=100)
 
 
-class MensagemResposta(BaseModel):
-    mensagem: str
+class MessageResponse(BaseModel):
+    message: str
 
 
-class ConfirmadoResposta(BaseModel):
-    confirmado: bool
+class ConfirmedResponse(BaseModel):
+    confirmed: bool
 
 
-class DescadastradoResposta(BaseModel):
-    descadastrado: bool
+class UnsubscribedResponse(BaseModel):
+    unsubscribed: bool
 
 
-# --- admin -------------------------------------------------------------------------------------
-
-
-class CargaExecucao(_Orm):
+class LoadRun(_Orm):
     id: int
     dataset: str
-    periodo: Mes | None
-    arquivo: str | None
-    hash: str | None
-    linhas: int | None
-    inicio: datetime
-    fim: datetime | None
-    status: Literal["em_andamento", "sucesso", "falha"]
-    detalhe: str | None
+    period: Month | None
+    source_file: str | None
+    checksum: str | None
+    row_count: int | None
+    started_at: datetime
+    finished_at: datetime | None
+    status: Literal["running", "success", "failed"]
+    detail: str | None
 
 
-class CargasResposta(BaseModel):
-    itens: list[CargaExecucao]
+class LoadRunListResponse(BaseModel):
+    items: list[LoadRun]
 
 
-class RevalidarEntrada(BaseModel):
+class RevalidateInput(BaseModel):
     tags: list[RevalidateTag] = Field(default_factory=lambda: list(ALL_TAGS))
 
 
-class RevalidarResposta(BaseModel):
+class RevalidateResponse(BaseModel):
     tags: list[RevalidateTag]
-    cache_limpo: bool
-    entradas_removidas: int
-    web_revalidado: bool
-    detalhe: str | None
+    cache_cleared: bool
+    entries_removed: int
+    web_revalidated: bool
+    detail: str | None
 
 
-class HealthResposta(BaseModel):
+class HealthResponse(BaseModel):
     status: str
-    banco: str
+    database: str

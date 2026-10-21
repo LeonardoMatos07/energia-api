@@ -1,10 +1,3 @@
-"""Test fixtures.
-
-By default tests run on in-memory SQLite (no Docker needed). Set TEST_DATABASE_URL to run them
-against Postgres: the schema is created with `alembic upgrade head` and tables are truncated
-between tests. Never point TEST_DATABASE_URL at a database with real data.
-"""
-
 import os
 import time
 import uuid
@@ -27,12 +20,12 @@ from app.email import EmailMessage
 from app.main import create_app
 from app.models import (
     Base,
-    CargaExecucao,
-    CurtailmentMensalSin,
-    CurtailmentMensalUf,
-    CurtailmentMensalUsina,
-    RelatorioMensal,
-    Usina,
+    LoadRun,
+    MonthlyReport,
+    Plant,
+    PlantMonthlyCurtailment,
+    StateMonthlyCurtailment,
+    SubsystemMonthlyCurtailment,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -99,11 +92,11 @@ def emails() -> FakeEmailSender:
 
 def make_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
-        "AMBIENTE": "local",
-        "AUTH_DESATIVADA": False,
+        "ENVIRONMENT": "local",
+        "AUTH_DISABLED": False,
         "DATABASE_URL": "sqlite://",
         "WEB_URL": "http://web.test",
-        "REVALIDATE_SECRET": "segredo-de-teste",
+        "REVALIDATE_SECRET": "test-secret",
         "COGNITO_REGION": "sa-east-1",
         "COGNITO_USER_POOL_ID": POOL_ID,
         "COGNITO_APP_CLIENT_IDS": f"{WEB_CLIENT}, {M2M_CLIENT}",
@@ -156,7 +149,7 @@ def app_factory(
 
     def handler(request: httpx.Request) -> httpx.Response:
         web_calls.append(request)
-        return httpx.Response(200, json={"revalidado": True})
+        return httpx.Response(200, json={"revalidated": True})
 
     def _factory(
         transport: httpx.BaseTransport | None = None, **settings_overrides: Any
@@ -189,52 +182,54 @@ def session(engine: Engine) -> Iterator[Session]:
         yield s
 
 
-def _usina(id_: str, tipo: str, nome: str, fonte: str, uf: str, **kw: Any) -> Usina:
-    return Usina(
+def _plant(id_: str, kind: str, name: str, source: str, state: str, **kw: Any) -> Plant:
+    return Plant(
         id=id_,
-        tipo=tipo,
-        nome=nome,
-        slug=f"{nome.lower().replace(' ', '-')}-{id_.lower().replace('_', '')}",
-        fonte=fonte,
-        uf=uf,
-        subsistema="NE",
-        potencia_mw=Decimal("100.500"),
+        kind=kind,
+        name=name,
+        slug=f"{name.lower().replace(' ', '-')}-{id_.lower().replace('_', '')}",
+        source=source,
+        state=state,
+        subsystem="NE",
+        capacity_mw=Decimal("100.500"),
         **kw,
     )
 
 
-def _cmu(usina_id: str, mes: date, cortada: str, **kw: Any) -> CurtailmentMensalUsina:
-    return CurtailmentMensalUsina(
-        usina_id=usina_id,
-        mes=mes,
-        geracao_verificada_mwh=Decimal("1000.000"),
-        energia_cortada_mwh=Decimal(cortada),
-        percentual_corte=Decimal("10.50"),
-        corte_rel_mwh=Decimal("1.000"),
-        corte_cnf_mwh=Decimal("2.000"),
-        corte_ene_mwh=Decimal("3.000"),
-        corte_outros_mwh=Decimal("0.000"),
-        perda_estimada_brl=Decimal("12345.67"),
-        base_preco="PLD",
-        horas_restritas=Decimal("12.5"),
+def _plant_month(plant_id: str, month: date, curtailed: str, **kw: Any) -> PlantMonthlyCurtailment:
+    return PlantMonthlyCurtailment(
+        plant_id=plant_id,
+        month=month,
+        verified_generation_mwh=Decimal("1000.000"),
+        curtailed_mwh=Decimal(curtailed),
+        curtailment_pct=Decimal("10.50"),
+        curtailed_rel_mwh=Decimal("1.000"),
+        curtailed_cnf_mwh=Decimal("2.000"),
+        curtailed_ene_mwh=Decimal("3.000"),
+        curtailed_other_mwh=Decimal("0.000"),
+        estimated_loss_brl=Decimal("12345.67"),
+        price_basis="PLD",
+        restricted_hours=Decimal("12.5"),
         **kw,
     )
 
 
-def _agg(cls: type[Any], key: dict[str, str], fonte: str, mes: date, cortada: str) -> Any:
+def _aggregate(
+    cls: type[Any], key: dict[str, str], source: str, month: date, curtailed: str
+) -> Any:
     return cls(
         **key,
-        fonte=fonte,
-        mes=mes,
-        geracao_verificada_mwh=Decimal("5000.000"),
-        energia_cortada_mwh=Decimal(cortada),
-        percentual_corte=Decimal("4.76"),
-        corte_rel_mwh=Decimal("10.000"),
-        corte_cnf_mwh=Decimal("20.000"),
-        corte_ene_mwh=Decimal("30.000"),
-        corte_outros_mwh=Decimal("0.000"),
-        perda_estimada_brl=Decimal("999.99"),
-        usinas_afetadas=3,
+        source=source,
+        month=month,
+        verified_generation_mwh=Decimal("5000.000"),
+        curtailed_mwh=Decimal(curtailed),
+        curtailment_pct=Decimal("4.76"),
+        curtailed_rel_mwh=Decimal("10.000"),
+        curtailed_cnf_mwh=Decimal("20.000"),
+        curtailed_ene_mwh=Decimal("30.000"),
+        curtailed_other_mwh=Decimal("0.000"),
+        estimated_loss_brl=Decimal("999.99"),
+        affected_plants=3,
     )
 
 
@@ -245,61 +240,67 @@ JUL = date(2026, 7, 1)
 
 @pytest.fixture
 def seed(session: Session) -> None:
-    session.add(_usina("CJU_BA1", "conjunto", "Conjunto Alfa", "eolica", "BA"))
+    session.add(_plant("CJU_BA1", "cluster", "Alpha Cluster", "wind", "BA"))
     session.flush()
     session.add_all(
         [
-            _usina("BAU1", "usina", "Alfa I", "eolica", "BA", conjunto_id="CJU_BA1"),
-            _usina("BAU2", "usina", "Alfa II", "eolica", "BA", conjunto_id="CJU_BA1"),
-            _usina("BAS1", "usina", "Sol Baiano", "solar", "BA"),
-            _usina("RNU1", "usina", "Ventos Potiguar", "eolica", "RN"),
+            _plant("BAU1", "plant", "Alpha I", "wind", "BA", cluster_id="CJU_BA1"),
+            _plant("BAU2", "plant", "Alpha II", "wind", "BA", cluster_id="CJU_BA1"),
+            _plant("BAS1", "plant", "Bahia Sun", "solar", "BA"),
+            _plant("RNU1", "plant", "Potiguar Winds", "wind", "RN"),
         ]
     )
     session.flush()
     session.add_all(
         [
-            _cmu("CJU_BA1", SEP, "900.000"),
-            _cmu("BAU1", SEP, "500.000", posicao_nacional=2, posicao_uf=1),
-            _cmu("BAU2", SEP, "400.000", posicao_nacional=3, posicao_uf=2),
-            _cmu("BAS1", SEP, "450.000", posicao_nacional=1, posicao_uf=1),
-            _cmu("RNU1", SEP, "800.000", posicao_nacional=1, posicao_uf=1),
-            _cmu("BAU1", AUG, "100.000", posicao_nacional=1, posicao_uf=1),
+            _plant_month("CJU_BA1", SEP, "900.000"),
+            _plant_month("BAU1", SEP, "500.000", national_rank=2, state_rank=1),
+            _plant_month("BAU2", SEP, "400.000", national_rank=3, state_rank=2),
+            _plant_month("BAS1", SEP, "450.000", national_rank=1, state_rank=1),
+            _plant_month("RNU1", SEP, "800.000", national_rank=1, state_rank=1),
+            _plant_month("BAU1", AUG, "100.000", national_rank=1, state_rank=1),
         ]
     )
-    for mes in (JUL, AUG, SEP):
-        session.add(_agg(CurtailmentMensalSin, {"subsistema": "SIN"}, "total", mes, "100.000"))
-        session.add(_agg(CurtailmentMensalSin, {"subsistema": "NE"}, "total", mes, "90.000"))
-        session.add(_agg(CurtailmentMensalSin, {"subsistema": "SIN"}, "eolica", mes, "80.000"))
-    for mes in (AUG, SEP):
-        session.add(_agg(CurtailmentMensalUf, {"uf": "BA"}, "total", mes, "70.000"))
-        session.add(_agg(CurtailmentMensalUf, {"uf": "BA"}, "eolica", mes, "60.000"))
+    for month in (JUL, AUG, SEP):
+        session.add(
+            _aggregate(SubsystemMonthlyCurtailment, {"subsystem": "SIN"}, "total", month, "100.000")
+        )
+        session.add(
+            _aggregate(SubsystemMonthlyCurtailment, {"subsystem": "NE"}, "total", month, "90.000")
+        )
+        session.add(
+            _aggregate(SubsystemMonthlyCurtailment, {"subsystem": "SIN"}, "wind", month, "80.000")
+        )
+    for month in (AUG, SEP):
+        session.add(_aggregate(StateMonthlyCurtailment, {"state": "BA"}, "total", month, "70.000"))
+        session.add(_aggregate(StateMonthlyCurtailment, {"state": "BA"}, "wind", month, "60.000"))
     now = datetime.now(UTC)
     session.add_all(
         [
-            RelatorioMensal(
-                mes=AUG,
-                titulo="Agosto",
-                slug="relatorio-agosto-2026",
-                resumo="Resumo de agosto",
-                conteudo="# Agosto",
-                publicado_em=now,
+            MonthlyReport(
+                month=AUG,
+                title="August",
+                slug="report-august-2026",
+                summary="August summary",
+                content="# August",
+                published_at=now,
             ),
-            RelatorioMensal(
-                mes=SEP, titulo="Setembro", slug="relatorio-setembro-2026", conteudo="# Rascunho"
+            MonthlyReport(
+                month=SEP, title="September", slug="report-september-2026", content="# Draft"
             ),
-            CargaExecucao(
+            LoadRun(
                 dataset="wind_plant_curtailment",
-                periodo=SEP,
-                inicio=datetime(2026, 10, 1, 3, tzinfo=UTC),
-                status="sucesso",
-                linhas=10,
+                period=SEP,
+                started_at=datetime(2026, 10, 1, 3, tzinfo=UTC),
+                status="success",
+                row_count=10,
             ),
-            CargaExecucao(
-                dataset="agregados",
-                periodo=SEP,
-                inicio=datetime(2026, 10, 1, 4, tzinfo=UTC),
-                status="falha",
-                detalhe="erro",
+            LoadRun(
+                dataset="aggregates",
+                period=SEP,
+                started_at=datetime(2026, 10, 1, 4, tzinfo=UTC),
+                status="failed",
+                detail="error",
             ),
         ]
     )

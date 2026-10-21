@@ -1,9 +1,3 @@
-"""In-memory sliding-window rate limiter.
-
-Limits are per API instance (not shared between tasks), which is enough to blunt abuse of the
-newsletter endpoint. A shared store (e.g. Redis or the WAF) would be needed for a global limit.
-"""
-
 import threading
 import time
 from collections import deque

@@ -1,5 +1,3 @@
-"""Admin authentication: Cognito access tokens (RS256) validated against the pool JWKS."""
-
 import logging
 import threading
 import time
@@ -30,8 +28,6 @@ def fetch_jwks(url: str) -> dict[str, Any]:
 
 
 class JwksCache:
-    """Caches the pool's signing keys; refetches on unknown `kid` (at most once per minute)."""
-
     def __init__(
         self,
         url: str,
@@ -56,7 +52,7 @@ class JwksCache:
                 self._refresh(now)
             key = self._keys.get(kid)
         if key is None:
-            raise jwt.InvalidTokenError("chave de assinatura desconhecida")
+            raise jwt.InvalidTokenError("unknown signing key")
         return key
 
     def _refresh(self, now: float) -> None:
@@ -72,7 +68,7 @@ class JwksCache:
 @dataclass(frozen=True)
 class AdminPrincipal:
     subject: str
-    kind: Literal["pessoa", "maquina", "local"]
+    kind: Literal["person", "machine", "local"]
 
 
 _bearer = HTTPBearer(auto_error=False)
@@ -90,7 +86,7 @@ def verify_admin_token(token: str, settings: Settings, jwks: JwksCache) -> Admin
     try:
         header = jwt.get_unverified_header(token)
         if header.get("alg") != "RS256":
-            raise jwt.InvalidTokenError("algoritmo não permitido")
+            raise jwt.InvalidTokenError("algorithm not allowed")
         key = jwks.get_key(str(header.get("kid", "")))
         claims: dict[str, Any] = jwt.decode(
             token,
@@ -101,28 +97,28 @@ def verify_admin_token(token: str, settings: Settings, jwks: JwksCache) -> Admin
             leeway=30,
         )
     except httpx.HTTPError as exc:
-        logger.error("falha ao obter o JWKS do Cognito: %s", exc)
+        logger.error("failed to fetch the Cognito JWKS: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Não foi possível validar o token agora.",
+            detail="Could not validate the token right now.",
         ) from exc
     except jwt.InvalidTokenError as exc:
-        logger.info("token de admin rejeitado: %s", exc)
-        raise _unauthorized("Token inválido.") from exc
+        logger.info("admin token rejected: %s", exc)
+        raise _unauthorized("Invalid token.") from exc
 
     if claims.get("token_use") != "access":
-        raise _unauthorized("Token inválido.")
+        raise _unauthorized("Invalid token.")
     if claims.get("client_id") not in settings.cognito_client_ids:
-        raise _unauthorized("Token inválido.")
+        raise _unauthorized("Invalid token.")
 
     groups = claims.get("cognito:groups") or []
     scopes = str(claims.get("scope", "")).split()
     subject = str(claims.get("sub") or claims.get("client_id"))
     if isinstance(groups, list) and ADMIN_GROUP in groups:
-        return AdminPrincipal(subject=subject, kind="pessoa")
+        return AdminPrincipal(subject=subject, kind="person")
     if ADMIN_SCOPE in scopes:
-        return AdminPrincipal(subject=subject, kind="maquina")
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito a admin.")
+        return AdminPrincipal(subject=subject, kind="machine")
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access only.")
 
 
 def require_admin(
@@ -130,11 +126,10 @@ def require_admin(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> AdminPrincipal:
     settings: Settings = request.app.state.settings
-    if settings.AUTH_DESATIVADA:
-        # Settings refuses this flag outside AMBIENTE=local.
+    if settings.AUTH_DISABLED:
         return AdminPrincipal(subject="local", kind="local")
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise _unauthorized("Autenticação necessária.")
+        raise _unauthorized("Authentication required.")
     jwks: JwksCache = request.app.state.jwks
     return verify_admin_token(credentials.credentials, settings, jwks)
 

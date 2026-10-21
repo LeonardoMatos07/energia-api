@@ -1,5 +1,3 @@
-"""Database engine and session dependency."""
-
 from collections.abc import Iterator
 from typing import Annotated
 

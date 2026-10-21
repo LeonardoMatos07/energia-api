@@ -1,0 +1,2295 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "energia-api",
+    "description": "Public and admin API of the energy data platform (Phase 1).",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/curtailment/subsystems": {
+      "get": {
+        "tags": [
+          "curtailment"
+        ],
+        "summary": "Subsystem Curtailment",
+        "operationId": "subsystem_curtailment_v1_curtailment_subsystems_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "subsystem",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "N",
+                    "NE",
+                    "S",
+                    "SE",
+                    "SIN"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional; without it, every subsystem and the SIN total.",
+              "title": "Subsystem"
+            },
+            "description": "Optional; without it, every subsystem and the SIN total."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubsystemCurtailmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/curtailment/states/{state}": {
+      "get": {
+        "tags": [
+          "curtailment"
+        ],
+        "summary": "State Curtailment",
+        "operationId": "state_curtailment_v1_curtailment_states__state__get",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2}$",
+              "title": "State"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateCurtailmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/plants": {
+      "get": {
+        "tags": [
+          "plants"
+        ],
+        "summary": "List Plants",
+        "operationId": "list_plants_v1_plants_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z]{2}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "wind",
+                    "solar"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "plant",
+                    "cluster"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/plants/{slug}": {
+      "get": {
+        "tags": [
+          "plants"
+        ],
+        "summary": "Get Plant",
+        "operationId": "get_plant_v1_plants__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ranking": {
+      "get": {
+        "tags": [
+          "plants"
+        ],
+        "summary": "Ranking",
+        "operationId": "ranking_v1_ranking_get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Month"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z]{2}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/months": {
+      "get": {
+        "tags": [
+          "plants",
+          "curtailment"
+        ],
+        "summary": "Months",
+        "operationId": "months_v1_months_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reports": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "List Reports",
+        "operationId": "list_reports_v1_reports_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reports/{slug}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Report",
+        "operationId": "get_report_v1_reports__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/newsletter": {
+      "post": {
+        "tags": [
+          "newsletter"
+        ],
+        "summary": "Subscribe",
+        "operationId": "subscribe_v1_newsletter_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsletterSignup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/newsletter/confirm": {
+      "get": {
+        "tags": [
+          "newsletter"
+        ],
+        "summary": "Confirm",
+        "operationId": "confirm_v1_newsletter_confirm_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/newsletter/unsubscribe": {
+      "get": {
+        "tags": [
+          "newsletter"
+        ],
+        "summary": "Unsubscribe",
+        "operationId": "unsubscribe_v1_newsletter_unsubscribe_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/load-runs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Load Runs",
+        "operationId": "list_load_runs_v1_admin_load_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadRunListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/reports": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List All Reports",
+        "operationId": "list_all_reports_v1_admin_reports_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReportListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Upsert Report",
+        "operationId": "upsert_report_v1_admin_reports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/admin/revalidate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Revalidate",
+        "operationId": "revalidate_v1_admin_revalidate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RevalidateInput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevalidateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "internal"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminReport": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "title",
+          "slug",
+          "summary",
+          "published_at",
+          "content",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdminReport"
+      },
+      "AdminReportListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminReport"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AdminReportListResponse"
+      },
+      "ConfirmedResponse": {
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmed"
+        ],
+        "title": "ConfirmedResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "database": {
+            "type": "string",
+            "title": "Database"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "database"
+        ],
+        "title": "HealthResponse"
+      },
+      "LoadRun": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "source_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dataset",
+          "period",
+          "source_file",
+          "checksum",
+          "row_count",
+          "started_at",
+          "finished_at",
+          "status",
+          "detail"
+        ],
+        "title": "LoadRun"
+      },
+      "LoadRunListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LoadRun"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "LoadRunListResponse"
+      },
+      "MessageResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse"
+      },
+      "MonthsResponse": {
+        "properties": {
+          "months": {
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "examples": [
+                "2026-09"
+              ]
+            },
+            "type": "array",
+            "title": "Months"
+          }
+        },
+        "type": "object",
+        "required": [
+          "months"
+        ],
+        "title": "MonthsResponse"
+      },
+      "NewsletterSignup": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "consent": {
+            "type": "boolean",
+            "const": true,
+            "title": "Consent"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "consent"
+        ],
+        "title": "NewsletterSignup"
+      },
+      "Plant": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "plant",
+              "cluster"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar"
+            ],
+            "title": "Source"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "subsystem": {
+            "type": "string",
+            "title": "Subsystem"
+          },
+          "capacity_mw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Mw"
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id"
+          },
+          "ceg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ceg"
+          },
+          "connection_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Point"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "slug",
+          "source",
+          "state",
+          "subsystem",
+          "capacity_mw",
+          "cluster_id",
+          "ceg",
+          "connection_point",
+          "operator",
+          "updated_at"
+        ],
+        "title": "Plant"
+      },
+      "PlantCurtailment": {
+        "properties": {
+          "plant_id": {
+            "type": "string",
+            "title": "Plant Id"
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "verified_generation_mwh": {
+            "type": "number",
+            "title": "Verified Generation Mwh"
+          },
+          "curtailed_mwh": {
+            "type": "number",
+            "title": "Curtailed Mwh"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          },
+          "curtailed_rel_mwh": {
+            "type": "number",
+            "title": "Curtailed Rel Mwh"
+          },
+          "curtailed_cnf_mwh": {
+            "type": "number",
+            "title": "Curtailed Cnf Mwh"
+          },
+          "curtailed_ene_mwh": {
+            "type": "number",
+            "title": "Curtailed Ene Mwh"
+          },
+          "curtailed_other_mwh": {
+            "type": "number",
+            "title": "Curtailed Other Mwh"
+          },
+          "estimated_loss_brl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Loss Brl"
+          },
+          "price_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Basis"
+          },
+          "restricted_hours": {
+            "type": "number",
+            "title": "Restricted Hours"
+          },
+          "state_avg_curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Avg Curtailment Pct"
+          },
+          "national_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "National Rank"
+          },
+          "state_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Rank"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plant_id",
+          "month",
+          "verified_generation_mwh",
+          "curtailed_mwh",
+          "curtailment_pct",
+          "curtailed_rel_mwh",
+          "curtailed_cnf_mwh",
+          "curtailed_ene_mwh",
+          "curtailed_other_mwh",
+          "estimated_loss_brl",
+          "price_basis",
+          "restricted_hours",
+          "state_avg_curtailment_pct",
+          "national_rank",
+          "state_rank",
+          "updated_at"
+        ],
+        "title": "PlantCurtailment"
+      },
+      "PlantDetailResponse": {
+        "properties": {
+          "plant": {
+            "$ref": "#/components/schemas/Plant"
+          },
+          "cluster": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlantSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cluster_plants": {
+            "items": {
+              "$ref": "#/components/schemas/PlantSummary"
+            },
+            "type": "array",
+            "title": "Cluster Plants"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/PlantCurtailment"
+            },
+            "type": "array",
+            "title": "Series"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plant",
+          "cluster",
+          "cluster_plants",
+          "series"
+        ],
+        "title": "PlantDetailResponse"
+      },
+      "PlantListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlantSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "PlantListResponse"
+      },
+      "PlantSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "plant",
+              "cluster"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar"
+            ],
+            "title": "Source"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "subsystem": {
+            "type": "string",
+            "title": "Subsystem"
+          },
+          "capacity_mw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Mw"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "slug",
+          "source",
+          "state",
+          "subsystem",
+          "capacity_mw"
+        ],
+        "title": "PlantSummary"
+      },
+      "RankedPlant": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "plant",
+              "cluster"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar"
+            ],
+            "title": "Source"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "subsystem": {
+            "type": "string",
+            "title": "Subsystem"
+          },
+          "capacity_mw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Mw"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "curtailed_mwh": {
+            "type": "number",
+            "title": "Curtailed Mwh"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          },
+          "estimated_loss_brl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Loss Brl"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "slug",
+          "source",
+          "state",
+          "subsystem",
+          "capacity_mw",
+          "rank",
+          "curtailed_mwh",
+          "curtailment_pct",
+          "estimated_loss_brl"
+        ],
+        "title": "RankedPlant"
+      },
+      "RankingResponse": {
+        "properties": {
+          "month": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Month"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RankedPlant"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "items"
+        ],
+        "title": "RankingResponse"
+      },
+      "Report": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "title",
+          "slug",
+          "summary",
+          "published_at",
+          "content"
+        ],
+        "title": "Report"
+      },
+      "ReportInput": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug",
+            "description": "Optional; generated from the title when missing."
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          },
+          "publish": {
+            "type": "boolean",
+            "title": "Publish"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "title",
+          "content",
+          "publish"
+        ],
+        "title": "ReportInput"
+      },
+      "ReportListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ReportListResponse"
+      },
+      "ReportSummary": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "title",
+          "slug",
+          "summary",
+          "published_at"
+        ],
+        "title": "ReportSummary"
+      },
+      "RevalidateInput": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "curtailment",
+                "plants",
+                "reports"
+              ]
+            },
+            "type": "array",
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "title": "RevalidateInput"
+      },
+      "RevalidateResponse": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "curtailment",
+                "plants",
+                "reports"
+              ]
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "cache_cleared": {
+            "type": "boolean",
+            "title": "Cache Cleared"
+          },
+          "entries_removed": {
+            "type": "integer",
+            "title": "Entries Removed"
+          },
+          "web_revalidated": {
+            "type": "boolean",
+            "title": "Web Revalidated"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tags",
+          "cache_cleared",
+          "entries_removed",
+          "web_revalidated",
+          "detail"
+        ],
+        "title": "RevalidateResponse"
+      },
+      "StateCurtailment": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar",
+              "total"
+            ],
+            "title": "Source"
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "verified_generation_mwh": {
+            "type": "number",
+            "title": "Verified Generation Mwh"
+          },
+          "curtailed_mwh": {
+            "type": "number",
+            "title": "Curtailed Mwh"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          },
+          "curtailed_rel_mwh": {
+            "type": "number",
+            "title": "Curtailed Rel Mwh"
+          },
+          "curtailed_cnf_mwh": {
+            "type": "number",
+            "title": "Curtailed Cnf Mwh"
+          },
+          "curtailed_ene_mwh": {
+            "type": "number",
+            "title": "Curtailed Ene Mwh"
+          },
+          "curtailed_other_mwh": {
+            "type": "number",
+            "title": "Curtailed Other Mwh"
+          },
+          "estimated_loss_brl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Loss Brl"
+          },
+          "affected_plants": {
+            "type": "integer",
+            "title": "Affected Plants"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "month",
+          "verified_generation_mwh",
+          "curtailed_mwh",
+          "curtailment_pct",
+          "curtailed_rel_mwh",
+          "curtailed_cnf_mwh",
+          "curtailed_ene_mwh",
+          "curtailed_other_mwh",
+          "estimated_loss_brl",
+          "affected_plants",
+          "updated_at",
+          "state"
+        ],
+        "title": "StateCurtailment"
+      },
+      "StateCurtailmentResponse": {
+        "properties": {
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/StateCurtailment"
+            },
+            "type": "array",
+            "title": "Series"
+          },
+          "ranking": {
+            "items": {
+              "$ref": "#/components/schemas/RankedPlant"
+            },
+            "type": "array",
+            "title": "Ranking"
+          },
+          "ranking_month": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranking Month"
+          }
+        },
+        "type": "object",
+        "required": [
+          "series",
+          "ranking",
+          "ranking_month"
+        ],
+        "title": "StateCurtailmentResponse"
+      },
+      "SubsystemCurtailment": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar",
+              "total"
+            ],
+            "title": "Source"
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "verified_generation_mwh": {
+            "type": "number",
+            "title": "Verified Generation Mwh"
+          },
+          "curtailed_mwh": {
+            "type": "number",
+            "title": "Curtailed Mwh"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          },
+          "curtailed_rel_mwh": {
+            "type": "number",
+            "title": "Curtailed Rel Mwh"
+          },
+          "curtailed_cnf_mwh": {
+            "type": "number",
+            "title": "Curtailed Cnf Mwh"
+          },
+          "curtailed_ene_mwh": {
+            "type": "number",
+            "title": "Curtailed Ene Mwh"
+          },
+          "curtailed_other_mwh": {
+            "type": "number",
+            "title": "Curtailed Other Mwh"
+          },
+          "estimated_loss_brl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Loss Brl"
+          },
+          "affected_plants": {
+            "type": "integer",
+            "title": "Affected Plants"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "subsystem": {
+            "type": "string",
+            "title": "Subsystem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "month",
+          "verified_generation_mwh",
+          "curtailed_mwh",
+          "curtailment_pct",
+          "curtailed_rel_mwh",
+          "curtailed_cnf_mwh",
+          "curtailed_ene_mwh",
+          "curtailed_other_mwh",
+          "estimated_loss_brl",
+          "affected_plants",
+          "updated_at",
+          "subsystem"
+        ],
+        "title": "SubsystemCurtailment"
+      },
+      "SubsystemCurtailmentResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubsystemCurtailment"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SubsystemCurtailmentResponse"
+      },
+      "UnsubscribedResponse": {
+        "properties": {
+          "unsubscribed": {
+            "type": "boolean",
+            "title": "Unsubscribed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unsubscribed"
+        ],
+        "title": "UnsubscribedResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

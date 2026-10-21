@@ -1,38 +1,51 @@
-"""Newsletter with double opt-in.
-
-Tokens are random (`secrets`), sent only by e-mail, and stored as sha256 hashes. The
-confirmation token expires after 48h; the unsubscribe token never expires.
-"""
-
 import hashlib
+import hmac
+import ipaddress
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionDep
 from app.email import EmailMessage, EmailSender, send_safely
-from app.models import AssinanteNewsletter
+from app.models import NewsletterSubscriber
 from app.ratelimit import RateLimiter
 from app.schemas import (
-    ConfirmadoResposta,
-    DescadastradoResposta,
-    MensagemResposta,
-    NewsletterEntrada,
+    ConfirmedResponse,
+    MessageResponse,
+    NewsletterSignup,
+    UnsubscribedResponse,
 )
 
 router = APIRouter(prefix="/v1/newsletter", tags=["newsletter"])
 
 CONFIRMATION_TTL = timedelta(hours=48)
-ACCEPTED_MESSAGE = "Se o endereço for válido, você receberá um e-mail para confirmar a inscrição."
-INVALID_TOKEN = "Token inválido ou expirado."  # noqa: S105 (message, not a secret)
+UNSUBSCRIBED_RETENTION = timedelta(days=30)
+ACCEPTED_MESSAGE = "If the address is valid, a confirmation e-mail is on its way."
+INVALID_LINK = "Invalid or expired token."
 
 TokenQuery = Annotated[str, Query(max_length=200)]
+
+CLIENT_IP_HEADER = "x-client-ip"
+WEB_AUTH_HEADER = "x-web-api-secret"
+
+
+def purge_stale_subscribers(session: Session, now: datetime) -> None:
+    session.execute(
+        delete(NewsletterSubscriber).where(
+            or_(
+                (NewsletterSubscriber.confirmed_at.is_(None))
+                & (NewsletterSubscriber.confirmation_token_expires_at < now),
+                NewsletterSubscriber.unsubscribed_at < now - UNSUBSCRIBED_RETENTION,
+            )
+        )
+    )
 
 
 def new_token() -> tuple[str, str]:
@@ -45,17 +58,30 @@ def hash_token(token: str) -> str:
 
 
 def _aware(value: datetime) -> datetime:
-    # SQLite (tests) returns naive datetimes; Postgres returns aware ones.
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
+def _trusted_web_client_ip(request: Request, settings: Settings) -> str | None:
+    if not settings.WEB_API_SECRET:
+        return None
+    provided = request.headers.get(WEB_AUTH_HEADER, "")
+    if not hmac.compare_digest(provided.encode(), settings.WEB_API_SECRET.encode()):
+        return None
+    try:
+        return str(ipaddress.ip_address(request.headers.get(CLIENT_IP_HEADER, "").strip()))
+    except ValueError:
+        return None
+
+
 def client_ip(request: Request, settings: Settings) -> str:
-    if settings.CONFIAR_X_FORWARDED_FOR:
+    trusted = _trusted_web_client_ip(request, settings)
+    if trusted is not None:
+        return trusted
+    if settings.TRUST_X_FORWARDED_FOR:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            # The right-most entry is the one appended by our own load balancer.
             return forwarded.split(",")[-1].strip()
-    return request.client.host if request.client else "desconhecido"
+    return request.client.host if request.client else "unknown"
 
 
 def confirmation_email(settings: Settings, to: str, confirm: str, unsubscribe: str) -> EmailMessage:
@@ -81,97 +107,95 @@ def confirmation_email(settings: Settings, to: str, confirm: str, unsubscribe: s
 @router.post(
     "",
     status_code=status.HTTP_202_ACCEPTED,
-    response_model=MensagemResposta,
-    responses={429: {"description": "Limite de taxa excedido"}},
+    response_model=MessageResponse,
+    responses={429: {"description": "Rate limit exceeded"}},
 )
 def subscribe(
-    body: NewsletterEntrada,
+    body: NewsletterSignup,
     request: Request,
     session: SessionDep,
     background: BackgroundTasks,
-) -> MensagemResposta:
+) -> MessageResponse:
     settings: Settings = request.app.state.settings
     limiter: RateLimiter = request.app.state.newsletter_limiter
     if not limiter.allow(client_ip(request, settings)):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Muitas tentativas. Tente novamente em instantes.",
+            detail="Too many attempts. Try again shortly.",
             headers={"Retry-After": "60"},
         )
 
     email = body.email.strip().lower()
     now = datetime.now(UTC)
+    purge_stale_subscribers(session, now)
     subscriber = session.scalars(
-        select(AssinanteNewsletter).where(AssinanteNewsletter.email == email)
+        select(NewsletterSubscriber).where(NewsletterSubscriber.email == email)
     ).first()
 
-    if subscriber is not None and subscriber.confirmado_em and not subscriber.descadastrado_em:
-        # Already an active subscriber: nothing to do, same answer (no list enumeration).
-        return MensagemResposta(mensagem=ACCEPTED_MESSAGE)
+    if subscriber is not None and subscriber.confirmed_at and not subscriber.unsubscribed_at:
+        return MessageResponse(message=ACCEPTED_MESSAGE)
 
     confirm_token, confirm_hash = new_token()
     unsubscribe_token, unsubscribe_hash = new_token()
     if subscriber is None:
-        subscriber = AssinanteNewsletter(email=email)
+        subscriber = NewsletterSubscriber(email=email)
         session.add(subscriber)
-    # New, pending or previously unsubscribed: (re)start the double opt-in.
-    subscriber.consentimento_em = now
-    subscriber.confirmado_em = None
-    subscriber.descadastrado_em = None
-    subscriber.token_confirmacao_hash = confirm_hash
-    subscriber.token_confirmacao_expira_em = now + CONFIRMATION_TTL
-    subscriber.token_descadastro_hash = unsubscribe_hash
-    subscriber.origem = body.origem
+    subscriber.consented_at = now
+    subscriber.confirmed_at = None
+    subscriber.unsubscribed_at = None
+    subscriber.confirmation_token_hash = confirm_hash
+    subscriber.confirmation_token_expires_at = now + CONFIRMATION_TTL
+    subscriber.unsubscribe_token_hash = unsubscribe_hash
+    subscriber.signup_source = body.source
     try:
         session.commit()
     except IntegrityError:
-        # Concurrent subscription of the same address; the other request sends the e-mail.
         session.rollback()
-        return MensagemResposta(mensagem=ACCEPTED_MESSAGE)
+        return MessageResponse(message=ACCEPTED_MESSAGE)
 
     sender: EmailSender = request.app.state.email_sender
     background.add_task(
         send_safely, sender, confirmation_email(settings, email, confirm_token, unsubscribe_token)
     )
-    return MensagemResposta(mensagem=ACCEPTED_MESSAGE)
+    return MessageResponse(message=ACCEPTED_MESSAGE)
 
 
 @router.get(
-    "/confirmar", response_model=ConfirmadoResposta, responses={400: {"description": INVALID_TOKEN}}
+    "/confirm", response_model=ConfirmedResponse, responses={400: {"description": INVALID_LINK}}
 )
-def confirm(session: SessionDep, token: TokenQuery) -> ConfirmadoResposta:
+def confirm(session: SessionDep, token: TokenQuery) -> ConfirmedResponse:
     subscriber = session.scalars(
-        select(AssinanteNewsletter).where(
-            AssinanteNewsletter.token_confirmacao_hash == hash_token(token)
+        select(NewsletterSubscriber).where(
+            NewsletterSubscriber.confirmation_token_hash == hash_token(token)
         )
     ).first()
     if subscriber is None:
-        raise HTTPException(status_code=400, detail=INVALID_TOKEN)
-    if subscriber.confirmado_em is not None and subscriber.descadastrado_em is None:
-        return ConfirmadoResposta(confirmado=True)  # link clicked twice
-    expires = subscriber.token_confirmacao_expira_em
+        raise HTTPException(status_code=400, detail=INVALID_LINK)
+    if subscriber.confirmed_at is not None and subscriber.unsubscribed_at is None:
+        return ConfirmedResponse(confirmed=True)
+    expires = subscriber.confirmation_token_expires_at
     now = datetime.now(UTC)
-    if expires is None or _aware(expires) <= now or subscriber.descadastrado_em is not None:
-        raise HTTPException(status_code=400, detail=INVALID_TOKEN)
-    subscriber.confirmado_em = now
+    if expires is None or _aware(expires) <= now or subscriber.unsubscribed_at is not None:
+        raise HTTPException(status_code=400, detail=INVALID_LINK)
+    subscriber.confirmed_at = now
     session.commit()
-    return ConfirmadoResposta(confirmado=True)
+    return ConfirmedResponse(confirmed=True)
 
 
 @router.get(
-    "/descadastrar",
-    response_model=DescadastradoResposta,
-    responses={400: {"description": INVALID_TOKEN}},
+    "/unsubscribe",
+    response_model=UnsubscribedResponse,
+    responses={400: {"description": INVALID_LINK}},
 )
-def unsubscribe(session: SessionDep, token: TokenQuery) -> DescadastradoResposta:
+def unsubscribe(session: SessionDep, token: TokenQuery) -> UnsubscribedResponse:
     subscriber = session.scalars(
-        select(AssinanteNewsletter).where(
-            AssinanteNewsletter.token_descadastro_hash == hash_token(token)
+        select(NewsletterSubscriber).where(
+            NewsletterSubscriber.unsubscribe_token_hash == hash_token(token)
         )
     ).first()
     if subscriber is None:
-        raise HTTPException(status_code=400, detail=INVALID_TOKEN)
-    if subscriber.descadastrado_em is None:
-        subscriber.descadastrado_em = datetime.now(UTC)
+        raise HTTPException(status_code=400, detail=INVALID_LINK)
+    if subscriber.unsubscribed_at is None:
+        subscriber.unsubscribed_at = datetime.now(UTC)
         session.commit()
-    return DescadastradoResposta(descadastrado=True)
+    return UnsubscribedResponse(unsubscribed=True)

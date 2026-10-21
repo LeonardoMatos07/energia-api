@@ -1,57 +1,55 @@
-"""Read queries shared by more than one router."""
-
 from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import CurtailmentMensalUsina, Usina
-from app.schemas import FonteAgregada, UsinaRanking, UsinaResumo
+from app.models import Plant, PlantMonthlyCurtailment
+from app.schemas import AggregateSource, PlantSummary, RankedPlant
 
 
-def latest_usina_month(session: Session, uf: str | None = None) -> date | None:
-    stmt = select(CurtailmentMensalUsina.mes).order_by(CurtailmentMensalUsina.mes.desc()).limit(1)
-    if uf is not None:
-        stmt = stmt.join(Usina, Usina.id == CurtailmentMensalUsina.usina_id).where(Usina.uf == uf)
+def latest_plant_month(session: Session, state: str | None = None) -> date | None:
+    stmt = (
+        select(PlantMonthlyCurtailment.month)
+        .order_by(PlantMonthlyCurtailment.month.desc())
+        .limit(1)
+    )
+    if state is not None:
+        stmt = stmt.join(Plant, Plant.id == PlantMonthlyCurtailment.plant_id).where(
+            Plant.state == state
+        )
     return session.scalars(stmt).first()
 
 
 def plant_ranking(
-    session: Session, mes: date, uf: str | None, fonte: FonteAgregada, limite: int
-) -> list[UsinaRanking]:
-    """Top plants (tipo = 'usina') by curtailed energy in a month.
-
-    With a specific `fonte`, `posicao` is the position computed by the pipeline
-    (`posicao_uf` when filtering by UF, otherwise `posicao_nacional`). With `fonte = total`
-    there is no stored cross-source position, so it is the position in this list.
-    """
+    session: Session, month: date, state: str | None, source: AggregateSource, limit: int
+) -> list[RankedPlant]:
     stmt = (
-        select(Usina, CurtailmentMensalUsina)
-        .join(CurtailmentMensalUsina, CurtailmentMensalUsina.usina_id == Usina.id)
-        .where(CurtailmentMensalUsina.mes == mes, Usina.tipo == "usina")
-        .order_by(CurtailmentMensalUsina.energia_cortada_mwh.desc(), Usina.id)
-        .limit(limite)
+        select(Plant, PlantMonthlyCurtailment)
+        .join(PlantMonthlyCurtailment, PlantMonthlyCurtailment.plant_id == Plant.id)
+        .where(PlantMonthlyCurtailment.month == month, Plant.kind == "plant")
+        .order_by(PlantMonthlyCurtailment.curtailed_mwh.desc(), Plant.id)
+        .limit(limit)
     )
-    if uf is not None:
-        stmt = stmt.where(Usina.uf == uf)
-    if fonte != "total":
-        stmt = stmt.where(Usina.fonte == fonte)
+    if state is not None:
+        stmt = stmt.where(Plant.state == state)
+    if source != "total":
+        stmt = stmt.where(Plant.source == source)
 
-    itens: list[UsinaRanking] = []
-    for index, (usina, linha) in enumerate(session.execute(stmt), start=1):
+    items: list[RankedPlant] = []
+    for index, (plant, row) in enumerate(session.execute(stmt), start=1):
         stored = None
-        if fonte != "total":
-            stored = linha.posicao_uf if uf is not None else linha.posicao_nacional
-        resumo = UsinaResumo.model_validate(usina).model_dump()
-        itens.append(
-            UsinaRanking.model_validate(
+        if source != "total":
+            stored = row.state_rank if state is not None else row.national_rank
+        summary = PlantSummary.model_validate(plant).model_dump()
+        items.append(
+            RankedPlant.model_validate(
                 {
-                    **resumo,
-                    "posicao": stored if stored is not None else index,
-                    "energia_cortada_mwh": linha.energia_cortada_mwh,
-                    "percentual_corte": linha.percentual_corte,
-                    "perda_estimada_brl": linha.perda_estimada_brl,
+                    **summary,
+                    "rank": stored if stored is not None else index,
+                    "curtailed_mwh": row.curtailed_mwh,
+                    "curtailment_pct": row.curtailment_pct,
+                    "estimated_loss_brl": row.estimated_loss_brl,
                 }
             )
         )
-    return itens
+    return items

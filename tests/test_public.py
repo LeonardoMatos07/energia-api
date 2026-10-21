@@ -5,198 +5,225 @@ from app.cache import PUBLIC_CACHE_CONTROL
 
 pytestmark = pytest.mark.usefixtures("seed")
 
-USINA_RESUMO_KEYS = {"id", "tipo", "nome", "slug", "fonte", "uf", "subsistema", "potencia_mw"}
-RANKING_KEYS = USINA_RESUMO_KEYS | {
-    "posicao",
-    "energia_cortada_mwh",
-    "percentual_corte",
-    "perda_estimada_brl",
+PLANT_SUMMARY_KEYS = {"id", "kind", "name", "slug", "source", "state", "subsystem", "capacity_mw"}
+RANKING_KEYS = PLANT_SUMMARY_KEYS | {
+    "rank",
+    "curtailed_mwh",
+    "curtailment_pct",
+    "estimated_loss_brl",
 }
 AGG_KEYS = {
-    "fonte",
-    "mes",
-    "geracao_verificada_mwh",
-    "energia_cortada_mwh",
-    "percentual_corte",
-    "corte_rel_mwh",
-    "corte_cnf_mwh",
-    "corte_ene_mwh",
-    "corte_outros_mwh",
-    "perda_estimada_brl",
-    "usinas_afetadas",
-    "atualizado_em",
+    "source",
+    "month",
+    "verified_generation_mwh",
+    "curtailed_mwh",
+    "curtailment_pct",
+    "curtailed_rel_mwh",
+    "curtailed_cnf_mwh",
+    "curtailed_ene_mwh",
+    "curtailed_other_mwh",
+    "estimated_loss_brl",
+    "affected_plants",
+    "updated_at",
 }
 
 
-def test_sin_default_total(client: TestClient) -> None:
-    r = client.get("/v1/curtailment/sin")
+def test_subsystems_default_total(client: TestClient) -> None:
+    r = client.get("/v1/curtailment/subsystems")
     assert r.status_code == 200
     assert r.headers["cache-control"] == PUBLIC_CACHE_CONTROL
-    itens = r.json()["itens"]
-    assert len(itens) == 6  # 3 months x (SIN, NE)
-    assert {i["fonte"] for i in itens} == {"total"}
-    assert set(itens[0]) == AGG_KEYS | {"subsistema"}
-    assert itens[0]["mes"] == "2026-07"
-    assert itens[0]["energia_cortada_mwh"] == 90.0  # numeric -> JSON number
-    assert isinstance(itens[0]["perda_estimada_brl"], float)
+    items = r.json()["items"]
+    assert len(items) == 6
+    assert {i["source"] for i in items} == {"total"}
+    assert set(items[0]) == AGG_KEYS | {"subsystem"}
+    assert items[0]["month"] == "2026-07"
+    assert items[0]["curtailed_mwh"] == 90.0
+    assert isinstance(items[0]["estimated_loss_brl"], float)
 
 
-def test_sin_filters(client: TestClient) -> None:
-    r = client.get("/v1/curtailment/sin", params={"fonte": "eolica", "inicio": "2026-08"})
-    itens = r.json()["itens"]
-    assert [i["mes"] for i in itens] == ["2026-08", "2026-09"]
-    assert {i["fonte"] for i in itens} == {"eolica"}
+def test_subsystems_filters(client: TestClient) -> None:
+    r = client.get("/v1/curtailment/subsystems", params={"source": "wind", "start": "2026-08"})
+    items = r.json()["items"]
+    assert [i["month"] for i in items] == ["2026-08", "2026-09"]
+    assert {i["source"] for i in items} == {"wind"}
 
-    r = client.get("/v1/curtailment/sin", params={"inicio": "2026-08", "fim": "2026-08"})
-    assert {i["mes"] for i in r.json()["itens"]} == {"2026-08"}
+    r = client.get("/v1/curtailment/subsystems", params={"start": "2026-08", "end": "2026-08"})
+    assert {i["month"] for i in r.json()["items"]} == {"2026-08"}
 
 
-@pytest.mark.parametrize("params", [{"fonte": "carvao"}, {"inicio": "2026-13"}, {"fim": "2026-9"}])
-def test_sin_invalid_params(client: TestClient, params: dict[str, str]) -> None:
-    r = client.get("/v1/curtailment/sin", params=params)
+def test_subsystems_subsystem_filter(client: TestClient) -> None:
+    r = client.get("/v1/curtailment/subsystems", params={"subsystem": "NE"})
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert [i["month"] for i in items] == ["2026-07", "2026-08", "2026-09"]
+    assert {(i["subsystem"], i["source"]) for i in items} == {("NE", "total")}
+
+    r = client.get(
+        "/v1/curtailment/subsystems",
+        params={"subsystem": "SIN", "source": "wind", "end": "2026-07"},
+    )
+    assert [(i["subsystem"], i["month"]) for i in r.json()["items"]] == [("SIN", "2026-07")]
+
+    r = client.get("/v1/curtailment/subsystems", params={"subsystem": "S"})
+    assert r.json() == {"items": []}
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"source": "coal"},
+        {"start": "2026-13"},
+        {"end": "2026-9"},
+        {"subsystem": "XX"},
+        {"subsystem": "ne"},
+    ],
+)
+def test_subsystems_invalid_params(client: TestClient, params: dict[str, str]) -> None:
+    r = client.get("/v1/curtailment/subsystems", params=params)
     assert r.status_code == 422
     assert isinstance(r.json()["detail"], str)
 
 
-def test_uf_default(client: TestClient) -> None:
-    r = client.get("/v1/curtailment/uf/ba")
+def test_state_default(client: TestClient) -> None:
+    r = client.get("/v1/curtailment/states/ba")
     assert r.status_code == 200
     assert r.headers["cache-control"] == PUBLIC_CACHE_CONTROL
     body = r.json()
-    assert set(body) == {"serie", "ranking", "mes_ranking"}
-    assert [s["mes"] for s in body["serie"]] == ["2026-08", "2026-09"]
-    assert set(body["serie"][0]) == AGG_KEYS | {"uf"}
-    assert body["mes_ranking"] == "2026-09"
+    assert set(body) == {"series", "ranking", "ranking_month"}
+    assert [s["month"] for s in body["series"]] == ["2026-08", "2026-09"]
+    assert set(body["series"][0]) == AGG_KEYS | {"state"}
+    assert body["ranking_month"] == "2026-09"
     ranking = body["ranking"]
-    # Only tipo = 'usina' (the conjunto is excluded), ordered by curtailed energy.
-    assert [u["id"] for u in ranking] == ["BAU1", "BAS1", "BAU2"]
-    assert [u["posicao"] for u in ranking] == [1, 2, 3]
+    assert [p["id"] for p in ranking] == ["BAU1", "BAS1", "BAU2"]
+    assert [p["rank"] for p in ranking] == [1, 2, 3]
     assert set(ranking[0]) == RANKING_KEYS
 
 
-def test_uf_fonte_and_mes(client: TestClient) -> None:
-    body = client.get("/v1/curtailment/uf/BA", params={"fonte": "eolica", "mes": "2026-08"}).json()
-    assert {s["fonte"] for s in body["serie"]} == {"eolica"}
-    assert body["mes_ranking"] == "2026-08"
-    assert [(u["id"], u["posicao"]) for u in body["ranking"]] == [("BAU1", 1)]
+def test_state_source_and_month(client: TestClient) -> None:
+    body = client.get(
+        "/v1/curtailment/states/BA", params={"source": "wind", "month": "2026-08"}
+    ).json()
+    assert {s["source"] for s in body["series"]} == {"wind"}
+    assert body["ranking_month"] == "2026-08"
+    assert [(p["id"], p["rank"]) for p in body["ranking"]] == [("BAU1", 1)]
 
 
-def test_uf_unknown(client: TestClient) -> None:
-    assert client.get("/v1/curtailment/uf/XX").status_code == 404
-    assert client.get("/v1/curtailment/uf/BAH").status_code == 422
+def test_state_unknown(client: TestClient) -> None:
+    assert client.get("/v1/curtailment/states/XX").status_code == 404
+    assert client.get("/v1/curtailment/states/BAH").status_code == 422
 
 
-def test_uf_without_data(client: TestClient) -> None:
-    body = client.get("/v1/curtailment/uf/SP").json()
-    assert body == {"serie": [], "ranking": [], "mes_ranking": None}
+def test_state_without_data(client: TestClient) -> None:
+    body = client.get("/v1/curtailment/states/SP").json()
+    assert body == {"series": [], "ranking": [], "ranking_month": None}
 
 
-def test_usinas_list_and_filters(client: TestClient) -> None:
-    r = client.get("/v1/usinas")
+def test_plants_list_and_filters(client: TestClient) -> None:
+    r = client.get("/v1/plants")
     assert r.headers["cache-control"] == PUBLIC_CACHE_CONTROL
     body = r.json()
-    assert body["total"] == 5 and body["pagina"] == 1 and body["tamanho"] == 20
-    assert set(body["itens"][0]) == USINA_RESUMO_KEYS
+    assert body["total"] == 5 and body["page"] == 1 and body["page_size"] == 20
+    assert set(body["items"][0]) == PLANT_SUMMARY_KEYS
 
-    body = client.get("/v1/usinas", params={"tamanho": 2, "pagina": 2}).json()
-    assert body["total"] == 5 and len(body["itens"]) == 2 and body["pagina"] == 2
+    body = client.get("/v1/plants", params={"page_size": 2, "page": 2}).json()
+    assert body["total"] == 5 and len(body["items"]) == 2 and body["page"] == 2
 
-    body = client.get("/v1/usinas", params={"busca": "ALFA"}).json()
-    assert {u["id"] for u in body["itens"]} == {"CJU_BA1", "BAU1", "BAU2"}
+    body = client.get("/v1/plants", params={"search": "ALPHA"}).json()
+    assert {p["id"] for p in body["items"]} == {"CJU_BA1", "BAU1", "BAU2"}
 
-    body = client.get("/v1/usinas", params={"uf": "ba", "fonte": "solar"}).json()
-    assert [u["id"] for u in body["itens"]] == ["BAS1"]
+    body = client.get("/v1/plants", params={"state": "ba", "source": "solar"}).json()
+    assert [p["id"] for p in body["items"]] == ["BAS1"]
 
-    body = client.get("/v1/usinas", params={"tipo": "conjunto"}).json()
-    assert [u["id"] for u in body["itens"]] == ["CJU_BA1"]
+    body = client.get("/v1/plants", params={"kind": "cluster"}).json()
+    assert [p["id"] for p in body["items"]] == ["CJU_BA1"]
 
-    body = client.get("/v1/usinas", params={"busca": "100%"}).json()
+    body = client.get("/v1/plants", params={"search": "100%"}).json()
     assert body["total"] == 0
 
-    assert client.get("/v1/usinas", params={"tamanho": 101}).status_code == 422
+    assert client.get("/v1/plants", params={"page_size": 101}).status_code == 422
 
 
-def test_usina_detail_member(client: TestClient) -> None:
-    r = client.get("/v1/usinas/alfa-i-bau1")
+def test_plant_detail_member(client: TestClient) -> None:
+    r = client.get("/v1/plants/alpha-i-bau1")
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"usina", "conjunto", "usinas_do_conjunto", "serie"}
-    assert set(body["usina"]) == USINA_RESUMO_KEYS | {
-        "conjunto_id",
+    assert set(body) == {"plant", "cluster", "cluster_plants", "series"}
+    assert set(body["plant"]) == PLANT_SUMMARY_KEYS | {
+        "cluster_id",
         "ceg",
-        "ponto_conexao",
-        "agente_operador",
-        "atualizado_em",
+        "connection_point",
+        "operator",
+        "updated_at",
     }
-    assert body["conjunto"]["id"] == "CJU_BA1"
-    assert {u["id"] for u in body["usinas_do_conjunto"]} == {"BAU1", "BAU2"}
-    assert [s["mes"] for s in body["serie"]] == ["2026-08", "2026-09"]
-    assert body["serie"][1]["posicao_uf"] == 1
-    assert body["serie"][1]["usina_id"] == "BAU1"
+    assert body["cluster"]["id"] == "CJU_BA1"
+    assert {p["id"] for p in body["cluster_plants"]} == {"BAU1", "BAU2"}
+    assert [s["month"] for s in body["series"]] == ["2026-08", "2026-09"]
+    assert body["series"][1]["state_rank"] == 1
+    assert body["series"][1]["plant_id"] == "BAU1"
 
 
-def test_usina_detail_conjunto_and_standalone(client: TestClient) -> None:
-    body = client.get("/v1/usinas/conjunto-alfa-cjuba1").json()
-    assert body["conjunto"] is None
-    assert {u["id"] for u in body["usinas_do_conjunto"]} == {"BAU1", "BAU2"}
+def test_plant_detail_cluster_and_standalone(client: TestClient) -> None:
+    body = client.get("/v1/plants/alpha-cluster-cjuba1").json()
+    assert body["cluster"] is None
+    assert {p["id"] for p in body["cluster_plants"]} == {"BAU1", "BAU2"}
 
-    body = client.get("/v1/usinas/sol-baiano-bas1").json()
-    assert body["conjunto"] is None and body["usinas_do_conjunto"] == []
+    body = client.get("/v1/plants/bahia-sun-bas1").json()
+    assert body["cluster"] is None and body["cluster_plants"] == []
 
-    r = client.get("/v1/usinas/nao-existe")
+    r = client.get("/v1/plants/does-not-exist")
     assert r.status_code == 404
-    assert r.json() == {"detail": "Usina não encontrada."}
+    assert r.json() == {"detail": "Plant not found."}
 
 
 def test_ranking(client: TestClient) -> None:
     r = client.get("/v1/ranking")
     assert r.headers["cache-control"] == PUBLIC_CACHE_CONTROL
     body = r.json()
-    assert body["mes"] == "2026-09"
-    assert [u["id"] for u in body["itens"]] == ["RNU1", "BAU1", "BAS1", "BAU2"]
-    assert [u["posicao"] for u in body["itens"]] == [1, 2, 3, 4]
-    assert set(body["itens"][0]) == RANKING_KEYS
+    assert body["month"] == "2026-09"
+    assert [p["id"] for p in body["items"]] == ["RNU1", "BAU1", "BAS1", "BAU2"]
+    assert [p["rank"] for p in body["items"]] == [1, 2, 3, 4]
+    assert set(body["items"][0]) == RANKING_KEYS
 
-    body = client.get("/v1/ranking", params={"fonte": "eolica"}).json()
-    assert [(u["id"], u["posicao"]) for u in body["itens"]] == [
+    body = client.get("/v1/ranking", params={"source": "wind"}).json()
+    assert [(p["id"], p["rank"]) for p in body["items"]] == [
         ("RNU1", 1),
         ("BAU1", 2),
         ("BAU2", 3),
     ]
 
-    body = client.get("/v1/ranking", params={"uf": "BA", "limite": 1}).json()
-    assert [u["id"] for u in body["itens"]] == ["BAU1"]
+    body = client.get("/v1/ranking", params={"state": "BA", "limit": 1}).json()
+    assert [p["id"] for p in body["items"]] == ["BAU1"]
 
-    body = client.get("/v1/ranking", params={"mes": "2026-08"}).json()
-    assert body["mes"] == "2026-08" and [u["id"] for u in body["itens"]] == ["BAU1"]
+    body = client.get("/v1/ranking", params={"month": "2026-08"}).json()
+    assert body["month"] == "2026-08" and [p["id"] for p in body["items"]] == ["BAU1"]
 
-    assert client.get("/v1/ranking", params={"limite": 101}).status_code == 422
+    assert client.get("/v1/ranking", params={"limit": 101}).status_code == 422
 
 
-def test_meses(client: TestClient) -> None:
-    r = client.get("/v1/meses")
+def test_months(client: TestClient) -> None:
+    r = client.get("/v1/months")
     assert r.headers["cache-control"] == PUBLIC_CACHE_CONTROL
-    assert r.json() == {"meses": ["2026-09", "2026-08", "2026-07"]}
+    assert r.json() == {"months": ["2026-09", "2026-08", "2026-07"]}
 
 
-def test_relatorios(client: TestClient) -> None:
-    r = client.get("/v1/relatorios")
+def test_reports(client: TestClient) -> None:
+    r = client.get("/v1/reports")
     assert r.headers["cache-control"] == PUBLIC_CACHE_CONTROL
-    itens = r.json()["itens"]
-    assert [i["slug"] for i in itens] == ["relatorio-agosto-2026"]
-    assert set(itens[0]) == {"mes", "titulo", "slug", "resumo", "publicado_em"}
-    assert itens[0]["mes"] == "2026-08"
+    items = r.json()["items"]
+    assert [i["slug"] for i in items] == ["report-august-2026"]
+    assert set(items[0]) == {"month", "title", "slug", "summary", "published_at"}
+    assert items[0]["month"] == "2026-08"
 
-    r = client.get("/v1/relatorios/relatorio-agosto-2026")
+    r = client.get("/v1/reports/report-august-2026")
     assert r.status_code == 200
-    assert r.json()["conteudo"] == "# Agosto"
+    assert r.json()["content"] == "# August"
 
-    r = client.get("/v1/relatorios/relatorio-setembro-2026")  # draft
+    r = client.get("/v1/reports/report-september-2026")
     assert r.status_code == 404
-    assert r.json() == {"detail": "Relatório não encontrado."}
+    assert r.json() == {"detail": "Report not found."}
 
 
 def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "banco": "ok"}
+    assert r.json() == {"status": "ok", "database": "ok"}

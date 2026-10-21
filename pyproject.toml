@@ -1,7 +1,7 @@
 [project]
 name = "energia-api"
 version = "0.1.0"
-description = "API da plataforma de dados de energia (Fase 1: monitor de curtailment eólico e solar)"
+description = "API of the energy data platform (Phase 1: wind and solar curtailment monitor)"
 readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [
@@ -28,7 +28,6 @@ dev = [
 
 [tool.uv]
 package = false
-# Every resolved package (including transitive ones) must be at least two weeks old.
 exclude-newer = "2026-10-06T00:00:00Z"
 
 [tool.ruff]
@@ -57,6 +56,5 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 addopts = "-ra"
 filterwarnings = [
-    # Starlette's TestClient still works on httpx; the httpx2 migration is not needed for tests.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
