@@ -89,19 +89,21 @@ def confirmation_email(settings: Settings, to: str, confirm: str, unsubscribe: s
     unsubscribe_url = f"{settings.web_url}/newsletter/descadastrar?token={quote(unsubscribe)}"
     text = (
         "Olá!\n\n"
-        "Recebemos um pedido de inscrição na newsletter do monitor de curtailment.\n"
+        "Recebemos um pedido de inscrição na newsletter do Spillway.\n"
         f"Para confirmar, acesse (válido por 48 horas):\n{confirm_url}\n\n"
         "Se não foi você, ignore este e-mail.\n"
         f"Para sair da lista a qualquer momento: {unsubscribe_url}\n"
     )
     html = (
         "<p>Olá!</p>"
-        "<p>Recebemos um pedido de inscrição na newsletter do monitor de curtailment.</p>"
+        "<p>Recebemos um pedido de inscrição na newsletter do Spillway.</p>"
         f'<p><a href="{confirm_url}">Confirmar inscrição</a> (válido por 48 horas).</p>'
         "<p>Se não foi você, ignore este e-mail.</p>"
         f'<p><small><a href="{unsubscribe_url}">Descadastrar</a></small></p>'
     )
-    return EmailMessage(to=to, subject="Confirme sua inscrição na newsletter", text=text, html=html)
+    return EmailMessage(
+        to=to, subject="Confirme sua inscrição na newsletter do Spillway", text=text, html=html
+    )
 
 
 @router.post(

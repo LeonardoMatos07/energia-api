@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     COGNITO_APP_CLIENT_IDS: str = ""
     AUTH_DISABLED: bool = False
 
-    EMAIL_SENDER: str = "Energia <no-reply@localhost>"
+    EMAIL_SENDER: str = "Spillway <no-reply@localhost>"
     SES_REGION: str = "sa-east-1"
 
     CACHE_TTL_SECONDS: float = Field(default=300.0, ge=0)

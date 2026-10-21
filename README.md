@@ -55,7 +55,7 @@ Read from the environment or from `.env` (see [`.env.example`](.env.example)).
 | `COGNITO_USER_POOL_ID` | empty | required in `prod` |
 | `COGNITO_APP_CLIENT_IDS` | empty | accepted clients, comma separated (web and M2M); required in `prod` |
 | `AUTH_DISABLED` | `false` | opens `/v1/admin/*` without a token; **only** with `ENVIRONMENT=local` |
-| `EMAIL_SENDER` | `Energia <no-reply@localhost>` | newsletter sender |
+| `EMAIL_SENDER` | `Spillway <no-reply@localhost>` | newsletter sender |
 | `SES_REGION` | `sa-east-1` | |
 | `CACHE_TTL_SECONDS` | `300` | in-memory cache of the public routes (0 disables it) |
 | `NEWSLETTER_RATE_LIMIT_PER_MINUTE` | `5` | per IP and per instance |
