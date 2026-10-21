@@ -1,9 +1,9 @@
-name: ci
+name: pipeline
 
 on:
-  pull_request:
   push:
-    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,8 +12,42 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  UV_VERSION: "0.12.23"
+  TRIVY_VERSION: "v0.75.0"
+  IMAGE_NAME: energia-api
+
 jobs:
-  check:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+  types:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: mypy
+        run: uv run mypy
+
+  test:
+    name: Tests
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,80 +64,153 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      ENVIRONMENT: local
       DATABASE_URL: postgresql+psycopg://energia:energia@localhost:5432/energia_test
       TEST_DATABASE_URL: postgresql+psycopg://energia:energia@localhost:5432/energia_test
-      ENVIRONMENT: local
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
-          version: "0.12.23"
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: ruff check
-        run: uv run ruff check .
-
-      - name: ruff format --check
-        run: uv run ruff format --check .
-
-      - name: mypy
-        run: uv run mypy
-
+      - run: uv sync --frozen
       - name: alembic upgrade head
         run: uv run alembic upgrade head
-
       - name: pytest
         run: uv run pytest
-
       - name: openapi.json is up to date
         run: |
           uv run python -m app.export_openapi openapi.json
           git diff --exit-code openapi.json
 
-  deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: check
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Export the locked runtime dependencies
+        run: uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.txt
+      - name: pip-audit
+        run: uvx pip-audit==2.10.1 -r requirements.txt --require-hashes --disable-pip --progress-spinner off
+
+  repo-scan:
+    name: Secrets and misconfiguration scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scan-ref: .
+          scanners: secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  image:
+    name: Build and scan image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     env:
-      AWS_REGION: sa-east-1
-      ECR_REPOSITORY: energia-api
+      PUBLISH: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.ECS_CLUSTER != '' }}
+    outputs:
+      published: ${{ steps.publish.outputs.enabled }}
     steps:
-      - uses: actions/checkout@v4
+      - id: publish
+        run: echo "enabled=$PUBLISH" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7.0.1
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: AWS credentials
+        if: env.PUBLISH == 'true'
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
+      - name: ECR login
+        if: env.PUBLISH == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2.1.7
+      - name: Push the image tagged with the commit SHA
+        if: env.PUBLISH == 'true'
+        env:
+          TARGET: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY || 'energia-api' }}:${{ github.sha }}
+        run: |
+          docker tag "$IMAGE_NAME:$GITHUB_SHA" "$TARGET"
+          docker push "$TARGET"
+          echo "Pushed \`$TARGET\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: aws-actions/configure-aws-credentials@v4
+  deploy:
+    name: Deploy to production
+    needs: [lint, types, test, dependency-audit, repo-scan, image]
+    if: needs.image.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'sa-east-1' }}
+      REPOSITORY: ${{ vars.ECR_REPOSITORY || 'energia-api' }}
+      CLUSTER: ${{ vars.ECS_CLUSTER }}
+      SERVICE: ${{ vars.ECS_SERVICE }}
+      MIGRATION_TASK: ${{ vars.ECS_MIGRATION_TASK_DEFINITION }}
+      SUBNETS: ${{ vars.ECS_SUBNETS }}
+      SECURITY_GROUP: ${{ vars.ECS_SECURITY_GROUP }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build and push the image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Deploy to ECS
+      - name: Point latest at this commit
         run: |
-          aws ecs update-service \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --service "${{ vars.ECS_SERVICE }}" \
-            --force-new-deployment
-          aws ecs wait services-stable \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --services "${{ vars.ECS_SERVICE }}"
+          manifest="$(aws ecr batch-get-image --repository-name "$REPOSITORY" \
+            --image-ids imageTag="$GITHUB_SHA" --query 'images[0].imageManifest' --output text)"
+          if ! output="$(aws ecr put-image --repository-name "$REPOSITORY" --image-tag latest \
+            --image-manifest "$manifest" 2>&1)"; then
+            echo "$output" | grep -q ImageAlreadyExistsException || { echo "$output"; exit 1; }
+          fi
+      - name: Run database migrations
+        run: |
+          task="$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$MIGRATION_TASK" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' --output text)"
+          echo "Migration task: $task"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
+          code="$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" \
+            --query 'tasks[0].containers[0].exitCode' --output text)"
+          if [ "$code" != "0" ]; then
+            echo "::error::Migration task exited with code $code"
+            exit 1
+          fi
+      - name: Roll out the new image
+        run: |
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --force-new-deployment > /dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          echo "Deployed \`$GITHUB_SHA\` to \`$SERVICE\`" >> "$GITHUB_STEP_SUMMARY"

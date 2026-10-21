@@ -118,16 +118,51 @@ The response says whether the web was reached (`web_revalidated`, `detail`); a w
 not change the 200 status. Saving a report through `POST /v1/admin/reports` also clears the API
 cache.
 
-## Deployment
+## Pipeline and deployment
 
-- `Dockerfile`: `python:3.12-slim` image with dependencies installed by `uv sync --frozen
-  --no-dev`, unprivileged user, `uvicorn` on port 8000. The same image runs the migrations
-  (`alembic upgrade head`).
-- CI (`.github/workflows/ci.yml`), on every PR and push to `main`: ruff, mypy,
-  `alembic upgrade head` and pytest against a Postgres 16 service, and the `openapi.json`
-  export.
-- Push to `main`: image pushed to ECR (`sa-east-1`, AWS authentication through OIDC, tags with
-  the SHA and `latest`) and `aws ecs update-service --force-new-deployment` on the
-  cluster/service from the repository variables `ECS_CLUSTER`/`ECS_SERVICE`.
+`.github/workflows/ci.yml` runs on every push (any branch), on every pull request and on demand
+(*Actions → pipeline → Run workflow*). Jobs run in parallel:
+
+| Job | What it checks |
+|---|---|
+| Lint | `ruff check` (includes the bandit `S` security rules) and `ruff format --check` |
+| Type check | `mypy` (strict) |
+| Tests | `alembic upgrade head` and `pytest` against a Postgres 16 service (migration round trip and model drift included), plus the `openapi.json` export |
+| Dependency audit | `pip-audit` over the locked runtime dependencies (PyPA advisory database) |
+| Secrets and misconfiguration scan | Trivy over the repository: leaked secrets and Dockerfile misconfigurations (HIGH/CRITICAL) |
+| Build and scan image | Builds the Docker image and scans it with Trivy (OS and Python packages, HIGH/CRITICAL with a fix available) |
+
+Any HIGH or CRITICAL finding fails the pipeline.
+
+On `main` (push or manual run), once the AWS variables exist, the image job also pushes the
+scanned image to ECR tagged with the commit SHA, and a **Deploy to production** job waits for
+approval in the `production` environment: GitHub shows a *Review deployments* button on the run.
+After approval it points `latest` at that SHA, runs the migration task
+(`alembic upgrade head`), fails if the migration exits non-zero, and rolls the ECS service out
+with `--force-new-deployment`, waiting until it is stable. To roll back, re-run the deploy job of
+an older successful run.
+
+Required repository settings (values come from the `energia-infra` outputs):
+
+| Kind | Name |
+|---|---|
+| Secret | `AWS_ROLE_ARN` |
+| Variables | `AWS_REGION`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_SERVICE`, `ECS_MIGRATION_TASK_DEFINITION`, `ECS_SUBNETS`, `ECS_SECURITY_GROUP` |
+| Environment | `production`, with required reviewers |
+
+Without `ECS_CLUSTER`, the image is built and scanned but not pushed, and the deploy job is
+skipped.
+
+`.github/dependabot.yml` opens weekly update PRs for the Python dependencies, the Docker base
+image and the GitHub Actions, with a 14-day cooldown (security updates are not delayed).
+
+Other notes:
+
+- `Dockerfile`: `python:3.12-slim` image with the Debian security updates applied, dependencies
+  installed by `uv sync --frozen --no-dev`, unprivileged user, `uvicorn` on port 8000. The same
+  image runs the migrations (`alembic upgrade head`).
+- `[tool.uv] exclude-newer` keeps dependencies at least two weeks old;
+  `exclude-newer-package` lifts that only for packages that need a security fix (currently
+  `certifi`, GHSA-6q48-6c7w-9gw2).
 - The cache and the newsletter limit live in memory, per instance; with several tasks, each one
   has its own.
