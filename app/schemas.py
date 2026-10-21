@@ -127,6 +127,19 @@ class StateCurtailmentResponse(BaseModel):
     ranking_month: Month | None
 
 
+class CurtailmentSummary(BaseModel):
+    scope: str
+    source: AggregateSource
+    start: Month | None
+    end: Month | None
+    months: int
+    verified_generation_mwh: float
+    curtailed_mwh: float
+    curtailment_pct: float | None
+    estimated_loss_brl: float | None
+    affected_plants: int
+
+
 class PlantListResponse(BaseModel):
     items: list[PlantSummary]
     total: int

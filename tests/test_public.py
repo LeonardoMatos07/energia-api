@@ -227,3 +227,62 @@ def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok", "database": "ok"}
+
+
+def test_summary_matches_the_monthly_rows(client: TestClient) -> None:
+    rows = client.get("/v1/curtailment/subsystems", params={"subsystem": "SIN"}).json()["items"]
+    r = client.get("/v1/curtailment/summary", params={"scope": "SIN"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["months"] == len(rows)
+    assert body["curtailed_mwh"] == pytest.approx(sum(row["curtailed_mwh"] for row in rows))
+    assert body["verified_generation_mwh"] == pytest.approx(
+        sum(row["verified_generation_mwh"] for row in rows)
+    )
+    potential = body["curtailed_mwh"] + body["verified_generation_mwh"]
+    assert body["curtailment_pct"] == pytest.approx(
+        body["curtailed_mwh"] / potential * 100, abs=0.01
+    )
+
+
+def test_summary_period_and_source(client: TestClient) -> None:
+    r = client.get(
+        "/v1/curtailment/summary",
+        params={"scope": "SIN", "source": "wind", "start": "2026-08", "end": "2026-09"},
+    )
+    body = r.json()
+    rows = client.get(
+        "/v1/curtailment/subsystems",
+        params={"subsystem": "SIN", "source": "wind", "start": "2026-08", "end": "2026-09"},
+    ).json()["items"]
+    assert body["months"] == 2
+    assert body["start"] == "2026-08"
+    assert body["curtailed_mwh"] == pytest.approx(sum(row["curtailed_mwh"] for row in rows))
+
+
+def test_summary_state_scope_is_case_insensitive(client: TestClient) -> None:
+    upper = client.get("/v1/curtailment/summary", params={"scope": "BA"})
+    lower = client.get("/v1/curtailment/summary", params={"scope": "ba"})
+    assert upper.status_code == lower.status_code == 200
+    assert upper.json() == lower.json()
+    assert upper.json()["affected_plants"] >= 0
+
+
+def test_summary_counts_each_plant_once(client: TestClient) -> None:
+    whole = client.get("/v1/curtailment/summary").json()
+    one_month = client.get(
+        "/v1/curtailment/summary", params={"start": "2026-09", "end": "2026-09"}
+    ).json()
+    assert whole["affected_plants"] >= one_month["affected_plants"]
+    assert whole["affected_plants"] <= sum(
+        client.get("/v1/curtailment/summary", params={"start": month, "end": month}).json()[
+            "affected_plants"
+        ]
+        for month in ("2026-07", "2026-08", "2026-09")
+    )
+
+
+def test_summary_rejects_unknown_scope_and_reversed_period(client: TestClient) -> None:
+    assert client.get("/v1/curtailment/summary", params={"scope": "XX"}).status_code == 404
+    reversed_period = {"start": "2026-09", "end": "2026-07"}
+    assert client.get("/v1/curtailment/summary", params=reversed_period).status_code == 422
