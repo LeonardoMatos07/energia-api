@@ -55,10 +55,13 @@ Read from the environment or from `.env` (see [`.env.example`](.env.example)).
 | `COGNITO_USER_POOL_ID` | empty | required in `prod` |
 | `COGNITO_APP_CLIENT_IDS` | empty | accepted clients, comma separated (web and M2M); required in `prod` |
 | `AUTH_DISABLED` | `false` | opens `/v1/admin/*` without a token; **only** with `ENVIRONMENT=local` |
-| `EMAIL_SENDER` | `Spillway <no-reply@localhost>` | newsletter sender |
+| `EMAIL_SENDER` | `Spillway <no-reply@localhost>` | sender of every e-mail (must be a verified sender in your provider) |
+| `EMAIL_BACKEND` | empty | `console` (logs the e-mail, local default), `smtp` or `ses`; empty = `ses` in `prod`, `console` otherwise |
 | `SES_REGION` | `sa-east-1` | |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` | empty, `587`, empty, empty, `true` | used when `EMAIL_BACKEND=smtp`; port 465 uses implicit TLS |
 | `CACHE_TTL_SECONDS` | `300` | in-memory cache of the public routes (0 disables it) |
 | `NEWSLETTER_RATE_LIMIT_PER_MINUTE` | `5` | per IP and per instance |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | `10` | sign-up, login, reset and verification attempts, per IP and per e-mail |
 | `TRUST_X_FORWARDED_FOR` | `false` | `true` only behind the ALB (uses the rightmost entry) |
 | `WEB_API_SECRET` | empty | secret shared with the `energia-web` server; with it, the IP in `X-Client-IP` counts for the newsletter limit |
 
@@ -105,6 +108,45 @@ Public routes have no authentication. `/v1/admin/*` requires a Cognito JWT *acce
   credentials* on the M2M app client.
 
 Missing or invalid token: 401. Valid token without the group or the scope: 403.
+
+## Member accounts
+
+Free access to the portal is behind a sign-up (`/v1/auth/*`). The sign-up form collects a profile
+that doubles as a lead record: role, company or institution, segment, company size, regions and
+plants of interest, goals, optional phone and referral, and two separate consents (privacy
+policy, required; contact, optional). `score_lead` (`app/leads.py`) turns it into a score and a
+`hot`/`warm`/`cold` tier, listed by `GET /v1/admin/leads` (admin token).
+
+| Route | Purpose |
+|---|---|
+| `POST /v1/auth/signup` | creates an unverified member and e-mails a link (48 h). Always answers 202, so it does not reveal whether an address has an account |
+| `POST /v1/auth/verify-email` | confirms the e-mail |
+| `POST /v1/auth/resend-verification` | new link |
+| `POST /v1/auth/login` | returns a 14-day opaque session token (stored hashed); 403 until the e-mail is verified |
+| `GET /v1/auth/me`, `POST /v1/auth/logout` | `Authorization: Bearer <session token>` |
+| `POST /v1/auth/forgot-password`, `POST /v1/auth/reset-password` | 1-hour link; a reset revokes every session |
+| `POST /v1/auth/me/delete` | deletes the account after confirming the password (LGPD) |
+
+Passwords use scrypt with a per-user salt; tokens are random and only their SHA-256 is stored.
+`energia-web` keeps the session token in an `httpOnly` cookie and gates the pages. The data routes
+stay public, so the gate is about lead capture, not about protecting the data.
+
+### Sending e-mail before SES
+
+`EMAIL_BACKEND=console` only logs the message (the verification link shows up in the API log), which
+is enough for local work. To send real messages without AWS, use any SMTP relay with
+`EMAIL_BACKEND=smtp`:
+
+- **Brevo** (free tier, about 300 e-mails a day): create an SMTP key, set `SMTP_HOST=smtp-relay.brevo.com`,
+  `SMTP_PORT=587`, `SMTP_USERNAME` and `SMTP_PASSWORD` from the SMTP page, and verify the sender
+  in `EMAIL_SENDER`.
+- **Gmail** (small tests): turn on 2-step verification, create an app password,
+  `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, your address as `SMTP_USERNAME` and the app
+  password as `SMTP_PASSWORD`, and use the same address in `EMAIL_SENDER`.
+- **Mailtrap** sandbox: captures the messages in a web inbox without delivering them.
+
+Free limits change, so check the provider. Switch to `EMAIL_BACKEND=ses` when SES is ready; no code
+changes.
 
 ## Revalidation (data → API → web)
 

@@ -24,7 +24,7 @@ class EmailSender(Protocol):
 
 class ConsoleEmailSender:
     def send(self, message: EmailMessage) -> None:
-        logger.info("e-mail to %s | %s\n%s", message.to, message.subject, message.text)
+        logger.warning("e-mail to %s | %s\n%s", message.to, message.subject, message.text)
 
 
 class SesEmailSender:
