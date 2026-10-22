@@ -1,4 +1,5 @@
 import re
+import uuid
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
@@ -10,6 +11,7 @@ from pydantic import (
     Field,
     PlainSerializer,
     WithJsonSchema,
+    model_validator,
 )
 
 MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
@@ -135,9 +137,54 @@ class CurtailmentSummary(BaseModel):
     months: int
     verified_generation_mwh: float
     curtailed_mwh: float
+    curtailed_rel_mwh: float
+    curtailed_cnf_mwh: float
+    curtailed_ene_mwh: float
+    curtailed_other_mwh: float
     curtailment_pct: float | None
     estimated_loss_brl: float | None
     affected_plants: int
+
+
+class RankedGroup(BaseModel):
+    rank: int
+    name: str
+    state: str | None
+    plants: int
+    affected_plants: int
+    verified_generation_mwh: float
+    curtailed_mwh: float
+    curtailment_pct: float | None
+    estimated_loss_brl: float | None
+    compensable_mwh: float
+
+
+class GroupRankingResponse(BaseModel):
+    group: Literal["operator", "connection_point"]
+    source: AggregateSource
+    start: Month | None
+    end: Month | None
+    items: list[RankedGroup]
+
+
+DayType = Literal["weekday", "weekend"]
+
+
+class HourlyPoint(BaseModel):
+    day_type: DayType
+    hour: int
+    avg_curtailed_mwh: float
+    avg_generation_mwh: float
+    curtailment_pct: float | None
+
+
+class HourlyProfileResponse(BaseModel):
+    scope: str
+    source: AggregateSource
+    start: Month | None
+    end: Month | None
+    months: int
+    points: list[HourlyPoint]
 
 
 class PlantListResponse(BaseModel):
@@ -252,3 +299,146 @@ class RevalidateResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     database: str
+
+
+Role = Literal[
+    "researcher", "student", "professional", "journalist", "public_sector", "investor", "other"
+]
+Segment = Literal[
+    "generator",
+    "storage_developer",
+    "trader",
+    "consultancy",
+    "financial",
+    "consumer",
+    "utility",
+    "equipment",
+    "law_regulatory",
+    "other",
+]
+CompanySize = Literal["1-10", "11-50", "51-200", "201-1000", "1000+"]
+StudyLevel = Literal["undergraduate", "master", "phd", "postdoc", "other"]
+Region = Literal["Norte", "Nordeste", "Centro-Oeste", "Sudeste", "Sul"]
+Interest = Literal[
+    "monitor_losses",
+    "compensation",
+    "storage",
+    "free_market",
+    "investment",
+    "data_api",
+    "research",
+    "press",
+]
+LeadTier = Literal["hot", "warm", "cold"]
+
+MAX_LIST_ITEMS = 8
+MAX_PLANTS = 5
+PASSWORD_MIN_LENGTH = 10
+PASSWORD_MAX_LENGTH = 128
+ROLES_WITH_ORGANIZATION = frozenset({"professional", "investor"})
+ROLES_WITH_INSTITUTION = frozenset({"student", "researcher"})
+
+
+def _unique[T](values: list[T]) -> list[T]:
+    return list(dict.fromkeys(values))
+
+
+class MemberSignup(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: EmailStr = Field(max_length=254)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+    name: str = Field(min_length=2, max_length=120)
+    role: Role
+    organization: str | None = Field(default=None, max_length=150)
+    job_title: str | None = Field(default=None, max_length=100)
+    segment: Segment | None = None
+    company_size: CompanySize | None = None
+    institution: str | None = Field(default=None, max_length=150)
+    study_level: StudyLevel | None = None
+    regions: list[Region] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
+    plants: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(
+        default_factory=list, max_length=MAX_PLANTS
+    )
+    interests: list[Interest] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
+    phone: str | None = Field(default=None, pattern=r"^[0-9+()\-\s]{8,20}$")
+    referral: str | None = Field(default=None, max_length=100)
+    marketing_opt_in: bool = False
+    consent: Literal[True]
+    source: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def _check_role_fields(self) -> "MemberSignup":
+        if self.role in ROLES_WITH_ORGANIZATION and not self.organization:
+            raise ValueError("organization is required for this role")
+        if self.role in ROLES_WITH_INSTITUTION and not self.institution:
+            raise ValueError("institution is required for this role")
+        self.regions = _unique(self.regions)
+        self.plants = _unique(self.plants)
+        self.interests = _unique(self.interests)
+        return self
+
+
+class MemberLogin(BaseModel):
+    email: EmailStr = Field(max_length=254)
+    password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
+
+
+class EmailOnly(BaseModel):
+    email: EmailStr = Field(max_length=254)
+
+
+class TokenOnly(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+
+
+class PasswordReset(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+
+
+class PasswordConfirmation(BaseModel):
+    password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
+
+
+class VerifiedResponse(BaseModel):
+    verified: bool
+
+
+class MemberProfile(_Orm):
+    id: uuid.UUID
+    email: str
+    name: str
+    role: Role
+    organization: str | None
+    job_title: str | None
+    segment: str | None
+    institution: str | None
+    regions: list[str]
+    plants: list[str]
+    interests: list[str]
+    created_at: datetime
+
+
+class LoginResponse(BaseModel):
+    session_token: str
+    expires_at: datetime
+    member: MemberProfile
+
+
+class Lead(MemberProfile):
+    company_size: str | None
+    study_level: str | None
+    phone: str | None
+    referral: str | None
+    signup_source: str | None
+    marketing_opt_in: bool
+    email_verified_at: datetime | None
+    lead_score: int
+    lead_tier: LeadTier
+    last_login_at: datetime | None
+
+
+class LeadListResponse(BaseModel):
+    items: list[Lead]
+    total: int

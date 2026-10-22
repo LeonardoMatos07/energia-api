@@ -1,5 +1,8 @@
 import logging
+import smtplib
+import ssl
 from dataclasses import dataclass
+from email.message import EmailMessage as MimeMessage
 from typing import Any, Protocol
 
 from app.config import Settings
@@ -49,9 +52,65 @@ class SesEmailSender:
         )
 
 
+SMTP_SSL_PORT = 465
+SMTP_TIMEOUT_SECONDS = 15
+
+
+class SmtpEmailSender:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        username: str,
+        password: str,
+        sender: str,
+        starttls: bool = True,
+    ) -> None:
+        self._host = host
+        self._port = port
+        self._username = username
+        self._password = password
+        self._sender = sender
+        self._starttls = starttls
+
+    def send(self, message: EmailMessage) -> None:
+        mime = MimeMessage()
+        mime["From"] = self._sender
+        mime["To"] = message.to
+        mime["Subject"] = message.subject
+        mime.set_content(message.text)
+        mime.add_alternative(message.html, subtype="html")
+        context = ssl.create_default_context()
+        if self._port == SMTP_SSL_PORT:
+            with smtplib.SMTP_SSL(
+                self._host, self._port, timeout=SMTP_TIMEOUT_SECONDS, context=context
+            ) as smtp:
+                self._deliver(smtp, mime)
+            return
+        with smtplib.SMTP(self._host, self._port, timeout=SMTP_TIMEOUT_SECONDS) as smtp:
+            if self._starttls:
+                smtp.starttls(context=context)
+            self._deliver(smtp, mime)
+
+    def _deliver(self, smtp: smtplib.SMTP, mime: MimeMessage) -> None:
+        if self._username:
+            smtp.login(self._username, self._password)
+        smtp.send_message(mime)
+
+
 def make_email_sender(settings: Settings) -> EmailSender:
-    if settings.ENVIRONMENT == "prod":
+    backend = settings.EMAIL_BACKEND or ("ses" if settings.ENVIRONMENT == "prod" else "console")
+    if backend == "ses":
         return SesEmailSender(settings.EMAIL_SENDER, settings.SES_REGION)
+    if backend == "smtp":
+        return SmtpEmailSender(
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            settings.SMTP_USERNAME,
+            settings.SMTP_PASSWORD,
+            settings.EMAIL_SENDER,
+            settings.SMTP_STARTTLS,
+        )
     return ConsoleEmailSender()
 
 

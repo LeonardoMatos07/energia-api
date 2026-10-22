@@ -1,7 +1,5 @@
-import hashlib
 import hmac
 import ipaddress
-import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from urllib.parse import quote
@@ -22,6 +20,7 @@ from app.schemas import (
     NewsletterSignup,
     UnsubscribedResponse,
 )
+from app.security import hash_token, new_token
 
 router = APIRouter(prefix="/v1/newsletter", tags=["newsletter"])
 
@@ -46,15 +45,6 @@ def purge_stale_subscribers(session: Session, now: datetime) -> None:
             )
         )
     )
-
-
-def new_token() -> tuple[str, str]:
-    token = secrets.token_urlsafe(32)
-    return token, hash_token(token)
-
-
-def hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _aware(value: datetime) -> datetime:

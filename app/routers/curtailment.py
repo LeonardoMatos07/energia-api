@@ -6,11 +6,18 @@ from sqlalchemy import select
 from app.cache import PublicCacheDep
 from app.db import SessionDep
 from app.models import StateMonthlyCurtailment, SubsystemMonthlyCurtailment
-from app.queries import SUBSYSTEM_SCOPES, curtailment_summary, latest_plant_month, plant_ranking
+from app.queries import (
+    SUBSYSTEM_SCOPES,
+    curtailment_summary,
+    hourly_profile,
+    latest_plant_month,
+    plant_ranking,
+)
 from app.schemas import (
     MONTH_PATTERN,
     AggregateSource,
     CurtailmentSummary,
+    HourlyProfileResponse,
     StateCurtailment,
     StateCurtailmentResponse,
     SubsystemCurtailment,
@@ -153,5 +160,25 @@ def summary(
 
     def load() -> CurtailmentSummary:
         return curtailment_summary(session, scope, source, first, last)
+
+    return cache.get_or_set(load)
+
+
+@router.get("/hourly", response_model=HourlyProfileResponse)
+def hourly(
+    session: SessionDep,
+    cache: PublicCacheDep,
+    scope: SubsystemOrSin = "SIN",
+    source: AggregateSource = "total",
+    start: MonthQuery = None,
+    end: MonthQuery = None,
+) -> HourlyProfileResponse:
+    first = parse_month(start) if start is not None else None
+    last = parse_month(end) if end is not None else None
+    if first is not None and last is not None and first > last:
+        raise HTTPException(status_code=422, detail="start must not be after end.")
+
+    def load() -> HourlyProfileResponse:
+        return hourly_profile(session, scope, source, first, last)
 
     return cache.get_or_set(load)

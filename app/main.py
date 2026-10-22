@@ -13,7 +13,16 @@ from app.config import Settings, get_settings
 from app.db import make_engine, make_sessionmaker
 from app.email import EmailSender, make_email_sender
 from app.ratelimit import RateLimiter
-from app.routers import admin, curtailment, health, newsletter, plants, reports
+from app.routers import (
+    admin,
+    auth,
+    curtailment,
+    health,
+    newsletter,
+    plants,
+    rankings,
+    reports,
+)
 
 logger = logging.getLogger("app")
 
@@ -56,6 +65,7 @@ def create_app(
     app.state.sessionmaker = make_sessionmaker(engine)
     app.state.cache = TTLCache(settings.CACHE_TTL_SECONDS)
     app.state.newsletter_limiter = RateLimiter(settings.NEWSLETTER_RATE_LIMIT_PER_MINUTE, 60.0)
+    app.state.auth_limiter = RateLimiter(settings.AUTH_RATE_LIMIT_PER_MINUTE, 60.0)
     app.state.email_sender = email_sender or make_email_sender(settings)
     app.state.jwks = JwksCache(settings.cognito_jwks_url)
     app.state.web_transport = web_transport
@@ -72,7 +82,7 @@ def create_app(
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
 
-    for module in (curtailment, plants, reports, newsletter, admin, health):
+    for module in (curtailment, plants, rankings, reports, newsletter, auth, admin, health):
         app.include_router(module.router)
     return app
 

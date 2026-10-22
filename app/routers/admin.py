@@ -6,16 +6,19 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Query, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth import AdminDep
 from app.cache import TTLCache
 from app.config import Settings
 from app.db import SessionDep
-from app.models import LoadRun, MonthlyReport
+from app.models import LoadRun, Member, MonthlyReport
 from app.schemas import (
     AdminReport,
     AdminReportListResponse,
+    Lead,
+    LeadListResponse,
+    LeadTier,
     LoadRunListResponse,
     ReportInput,
     RevalidateInput,
@@ -118,3 +121,20 @@ def revalidate(
         web_revalidated=reached,
         detail=detail,
     )
+
+
+@router.get("/leads", response_model=LeadListResponse)
+def list_leads(
+    _admin: AdminDep,
+    session: SessionDep,
+    tier: Annotated[LeadTier | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> LeadListResponse:
+    stmt = select(Member)
+    if tier is not None:
+        stmt = stmt.where(Member.lead_tier == tier)
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = session.scalars(
+        stmt.order_by(Member.lead_score.desc(), Member.created_at.desc()).limit(limit)
+    ).all()
+    return LeadListResponse(items=[Lead.model_validate(row) for row in rows], total=total)

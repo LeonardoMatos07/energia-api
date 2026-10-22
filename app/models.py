@@ -4,7 +4,9 @@ from decimal import Decimal
 
 from sqlalchemy import (
     CHAR,
+    JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -14,6 +16,7 @@ from sqlalchemy import (
     Integer,
     MetaData,
     Numeric,
+    SmallInteger,
     String,
     Text,
     Uuid,
@@ -210,10 +213,94 @@ class AppUser(Base):
     created_at: Mapped[datetime] = _now_default()
 
 
+class HourlyCurtailment(Base):
+    __tablename__ = "hourly_curtailment"
+    __table_args__ = (
+        CheckConstraint("hour BETWEEN 0 AND 23", name="hour"),
+        CheckConstraint("day_type IN ('weekday', 'weekend')", name="day_type"),
+        CheckConstraint("source IN ('wind', 'solar', 'total')", name="source"),
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE', 'SIN')", name="subsystem"),
+    )
+
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    source: Mapped[str] = mapped_column(Text, primary_key=True)
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    day_type: Mapped[str] = mapped_column(Text, primary_key=True)
+    hour: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    curtailed_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    generation_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    days: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class Member(Base):
+    __tablename__ = "member"
+    __table_args__ = (
+        CheckConstraint("email = lower(email)", name="email_lowercase"),
+        Index("ix_member_lead_score", "lead_score"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    organization: Mapped[str | None] = mapped_column(Text)
+    job_title: Mapped[str | None] = mapped_column(Text)
+    segment: Mapped[str | None] = mapped_column(Text)
+    company_size: Mapped[str | None] = mapped_column(Text)
+    institution: Mapped[str | None] = mapped_column(Text)
+    study_level: Mapped[str | None] = mapped_column(Text)
+    regions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    plants: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    interests: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    phone: Mapped[str | None] = mapped_column(Text)
+    referral: Mapped[str | None] = mapped_column(Text)
+    signup_source: Mapped[str | None] = mapped_column(Text)
+    marketing_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    privacy_consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lead_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lead_tier: Mapped[str] = mapped_column(Text, nullable=False, default="cold")
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _now_default()
+
+
+class MemberToken(Base):
+    __tablename__ = "member_token"
+    __table_args__ = (CheckConstraint("kind IN ('verify', 'reset')", name="kind"),)
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    member_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("member.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _now_default()
+
+
+class MemberSession(Base):
+    __tablename__ = "member_session"
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    member_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("member.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _now_default()
+
+
+Index("ix_member_token_member_id", MemberToken.member_id)
+Index("ix_member_session_member_id", MemberSession.member_id)
+
+
 for _name in (
     "plant_monthly_curtailment",
     "state_monthly_curtailment",
     "subsystem_monthly_curtailment",
+    "hourly_curtailment",
     "monthly_report",
 ):
     _table = Base.metadata.tables[_name]
