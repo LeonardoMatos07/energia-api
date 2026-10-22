@@ -121,9 +121,9 @@ policy, required; contact, optional). `score_lead` (`app/leads.py`) turns it int
 
 | Route | Purpose |
 |---|---|
-| `POST /v1/auth/signup` | creates an unverified member and e-mails a link (48 h). Always answers 202, so it does not reveal whether an address has an account |
-| `POST /v1/auth/verify-email` | confirms the e-mail |
-| `POST /v1/auth/resend-verification` | new link |
+| `POST /v1/auth/signup` | creates an unverified member and e-mails a 6-digit code (30 min). Always answers 202, so it does not reveal whether an address has an account. With `ENVIRONMENT=local` and the console e-mail backend the response also carries `dev_code`, so the flow can be tried without a mail provider |
+| `POST /v1/auth/verify-email` | `{email, code}`; a wrong code counts an attempt and the code is locked after 5, so a new one is needed |
+| `POST /v1/auth/resend-verification` | new code, replacing the previous one |
 | `POST /v1/auth/login` | returns a 14-day opaque session token (stored hashed); 403 until the e-mail is verified |
 | `GET /v1/auth/me`, `POST /v1/auth/logout` | `Authorization: Bearer <session token>` |
 | `POST /v1/auth/forgot-password`, `POST /v1/auth/reset-password` | 1-hour link; a reset revokes every session |

@@ -1,4 +1,5 @@
 import re
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -6,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Member, MemberSession
+from app.models import Member, MemberSession, MemberToken
 from app.security import hash_password, verify_password
 from tests.conftest import FakeEmailSender
 
@@ -39,11 +40,20 @@ def token_from(emails: FakeEmailSender, index: int = -1) -> str:
     return match.group(1)
 
 
+def code_from(emails: FakeEmailSender, index: int = -1) -> str:
+    match = re.search(r"código de verificação é: (\d{6})", emails.sent[index].text)
+    assert match, emails.sent[index].text
+    return match.group(1)
+
+
+def verify(client: TestClient, emails: FakeEmailSender, email: str = "ana@empresa.com.br") -> Any:
+    return client.post("/v1/auth/verify-email", json={"email": email, "code": code_from(emails)})
+
+
 def signup_and_verify(client: TestClient, emails: FakeEmailSender, **overrides: Any) -> None:
-    assert client.post("/v1/auth/signup", json=payload(**overrides)).status_code == 202
-    assert (
-        client.post("/v1/auth/verify-email", json={"token": token_from(emails)}).status_code == 200
-    )
+    body = payload(**overrides)
+    assert client.post("/v1/auth/signup", json=body).status_code == 202
+    assert verify(client, emails, str(body["email"]).lower()).status_code == 200
 
 
 def login(client: TestClient, email: str = "ana@empresa.com.br", password: str = PASSWORD) -> Any:
@@ -58,20 +68,87 @@ def test_password_hashing_round_trip() -> None:
     assert not verify_password("a long enough secret", "garbage")
 
 
-def test_signup_sends_a_verification_link_and_blocks_login_until_verified(
+def test_signup_sends_a_six_digit_code_and_blocks_login_until_verified(
     client: TestClient, emails: FakeEmailSender
 ) -> None:
     response = client.post("/v1/auth/signup", json=payload())
     assert response.status_code == 202
     assert len(emails.sent) == 1
     assert emails.sent[0].to == "ana@empresa.com.br"
-    assert "http://web.test/verificar-email?token=" in emails.sent[0].text
+    code = code_from(emails)
+    assert re.fullmatch(r"\d{6}", code)
+    assert code in emails.sent[0].subject
+    assert "token=" not in emails.sent[0].text
 
     assert login(client).status_code == 403
 
-    verified = client.post("/v1/auth/verify-email", json={"token": token_from(emails)})
+    verified = verify(client, emails)
     assert verified.json() == {"verified": True}
     assert login(client).status_code == 200
+
+
+def test_the_code_is_only_returned_for_local_console_mail(
+    app_factory: Any, emails: FakeEmailSender
+) -> None:
+    local = app_factory()
+    assert local.post("/v1/auth/signup", json=payload()).json()["dev_code"] == code_from(emails)
+
+    smtp = app_factory(EMAIL_BACKEND="smtp", SMTP_HOST="smtp.example.org")
+    response = smtp.post("/v1/auth/signup", json=payload(email="other@empresa.com.br"))
+    assert response.json()["dev_code"] is None
+
+
+def test_a_wrong_code_is_refused_and_locks_after_five_attempts(
+    client: TestClient, emails: FakeEmailSender
+) -> None:
+    client.post("/v1/auth/signup", json=payload())
+    real = code_from(emails)
+    wrong = "000000" if real != "000000" else "111111"
+    for _ in range(5):
+        response = client.post(
+            "/v1/auth/verify-email", json={"email": "ana@empresa.com.br", "code": wrong}
+        )
+        assert response.status_code == 400
+    locked = client.post(
+        "/v1/auth/verify-email", json={"email": "ana@empresa.com.br", "code": real}
+    )
+    assert locked.status_code == 400
+
+    client.post("/v1/auth/resend-verification", json={"email": "ana@empresa.com.br"})
+    assert verify(client, emails).status_code == 200
+
+
+def test_an_expired_code_is_refused(
+    client: TestClient, emails: FakeEmailSender, session: Session
+) -> None:
+    client.post("/v1/auth/signup", json=payload())
+    token = session.scalars(select(MemberToken)).one()
+    token.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    session.commit()
+    assert verify(client, emails).status_code == 400
+
+
+def test_verification_does_not_reveal_which_accounts_exist(
+    client: TestClient, emails: FakeEmailSender
+) -> None:
+    unknown = client.post(
+        "/v1/auth/verify-email", json={"email": "ghost@example.com", "code": "123456"}
+    )
+    assert unknown.status_code == 400
+    signup_and_verify(client, emails)
+    again = client.post(
+        "/v1/auth/verify-email", json={"email": "ana@empresa.com.br", "code": "123456"}
+    )
+    assert again.status_code == 400
+    assert again.json() == unknown.json()
+
+
+@pytest.mark.parametrize("code", ["12345", "1234567", "abcdef", "12 456"])
+def test_the_code_must_have_six_digits(client: TestClient, code: str) -> None:
+    response = client.post(
+        "/v1/auth/verify-email", json={"email": "ana@empresa.com.br", "code": code}
+    )
+    assert response.status_code == 422
 
 
 def test_login_me_and_logout(client: TestClient, emails: FakeEmailSender) -> None:
@@ -119,30 +196,40 @@ def test_signup_for_an_existing_account_creates_nothing_new(
     assert session.scalars(select(Member.name)).one() == "Ana Souza"
 
 
-def test_resubmitting_an_unverified_signup_invalidates_the_old_link(
+def test_resubmitting_an_unverified_signup_invalidates_the_old_code(
     client: TestClient, emails: FakeEmailSender
 ) -> None:
     client.post("/v1/auth/signup", json=payload())
-    old = token_from(emails)
+    old = code_from(emails)
     client.post("/v1/auth/signup", json=payload(password="a brand new password"))
-    assert client.post("/v1/auth/verify-email", json={"token": old}).status_code == 400
-    assert (
-        client.post("/v1/auth/verify-email", json={"token": token_from(emails)}).status_code == 200
-    )
+    new = code_from(emails)
+    if old != new:
+        assert (
+            client.post(
+                "/v1/auth/verify-email", json={"email": "ana@empresa.com.br", "code": old}
+            ).status_code
+            == 400
+        )
+    assert verify(client, emails).status_code == 200
     assert login(client, password="a brand new password").status_code == 200
     assert login(client).status_code == 401
 
 
-def test_resend_verification_issues_a_new_link(client: TestClient, emails: FakeEmailSender) -> None:
+def test_resend_verification_issues_a_new_code(client: TestClient, emails: FakeEmailSender) -> None:
     client.post("/v1/auth/signup", json=payload())
-    first = token_from(emails)
+    first = code_from(emails)
     response = client.post("/v1/auth/resend-verification", json={"email": "ana@empresa.com.br"})
     assert response.status_code == 202
     assert len(emails.sent) == 2
-    assert client.post("/v1/auth/verify-email", json={"token": first}).status_code == 400
-    assert (
-        client.post("/v1/auth/verify-email", json={"token": token_from(emails)}).status_code == 200
-    )
+    second = code_from(emails)
+    if first != second:
+        assert (
+            client.post(
+                "/v1/auth/verify-email", json={"email": "ana@empresa.com.br", "code": first}
+            ).status_code
+            == 400
+        )
+    assert verify(client, emails).status_code == 200
 
 
 def test_resend_does_not_reveal_unknown_addresses(

@@ -384,6 +384,16 @@ class MemberLogin(BaseModel):
     password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
 
 
+class EmailVerification(BaseModel):
+    email: EmailStr = Field(max_length=254)
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+
+class SignupResponse(BaseModel):
+    message: str
+    dev_code: str | None = None
+
+
 class EmailOnly(BaseModel):
     email: EmailStr = Field(max_length=254)
 

@@ -191,9 +191,9 @@ def test_auth_flow_is_audited(
 ) -> None:
     client.post("/v1/auth/signup", json=payload())
     login(client, password="wrong password!!")
-    from tests.test_auth import token_from
+    from tests.test_auth import verify
 
-    client.post("/v1/auth/verify-email", json={"token": token_from(emails)})
+    verify(client, emails)
     token = login(client).json()["session_token"]
     client.post("/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
 

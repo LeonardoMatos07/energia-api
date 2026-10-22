@@ -1119,7 +1119,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MessageResponse"
+                  "$ref": "#/components/schemas/SignupResponse"
                 }
               }
             }
@@ -1151,7 +1151,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TokenOnly"
+                "$ref": "#/components/schemas/EmailVerification"
               }
             }
           },
@@ -1204,7 +1204,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MessageResponse"
+                  "$ref": "#/components/schemas/SignupResponse"
                 }
               }
             }
@@ -2568,6 +2568,27 @@
           "email"
         ],
         "title": "EmailOnly"
+      },
+      "EmailVerification": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "title": "EmailVerification"
       },
       "EntityUsage": {
         "properties": {
@@ -4820,6 +4841,30 @@
         ],
         "title": "SectionUsage"
       },
+      "SignupResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "dev_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dev Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "SignupResponse"
+      },
       "StateCurtailment": {
         "properties": {
           "source": {
@@ -5069,21 +5114,6 @@
           "items"
         ],
         "title": "SubsystemCurtailmentResponse"
-      },
-      "TokenOnly": {
-        "properties": {
-          "token": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Token"
-          }
-        },
-        "type": "object",
-        "required": [
-          "token"
-        ],
-        "title": "TokenOnly"
       },
       "UnsubscribedResponse": {
         "properties": {

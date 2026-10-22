@@ -1,3 +1,5 @@
+import hmac
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from urllib.parse import quote
@@ -17,6 +19,7 @@ from app.ratelimit import RateLimiter
 from app.routers.newsletter import client_ip
 from app.schemas import (
     EmailOnly,
+    EmailVerification,
     LoginResponse,
     MemberLogin,
     MemberProfile,
@@ -24,18 +27,21 @@ from app.schemas import (
     MessageResponse,
     PasswordConfirmation,
     PasswordReset,
-    TokenOnly,
+    SignupResponse,
     VerifiedResponse,
 )
 from app.security import DUMMY_HASH, hash_password, hash_token, new_token, verify_password
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
-VERIFY_TTL = timedelta(hours=48)
+VERIFY_CODE_TTL = timedelta(minutes=30)
+MAX_CODE_ATTEMPTS = 5
+CODE_DIGITS = 6
 RESET_TTL = timedelta(hours=1)
 SESSION_TTL = timedelta(days=14)
 ACCEPTED_MESSAGE = "If the address is valid, an e-mail is on its way."
 INVALID_LINK = "Invalid or expired token."
+INVALID_CODE = "Invalid or expired code."
 INVALID_CREDENTIALS = "Invalid e-mail or password."
 UNVERIFIED = "Email not verified."
 UNAUTHORIZED = "Authentication required."
@@ -121,6 +127,31 @@ def _issue_token(session: Session, member: Member, kind: str, ttl: timedelta) ->
     return token
 
 
+def _code_hash(member: Member, code: str) -> str:
+    return hash_token(f"{member.id}:{code}")
+
+
+def _issue_code(session: Session, member: Member) -> str:
+    session.execute(
+        delete(MemberToken).where(MemberToken.member_id == member.id, MemberToken.kind == "verify")
+    )
+    code = f"{secrets.randbelow(10**CODE_DIGITS):0{CODE_DIGITS}d}"
+    session.add(
+        MemberToken(
+            member_id=member.id,
+            kind="verify",
+            token_hash=_code_hash(member, code),
+            expires_at=datetime.now(UTC) + VERIFY_CODE_TTL,
+        )
+    )
+    return code
+
+
+def _dev_code(settings: Settings, code: str) -> str | None:
+    local_console = settings.ENVIRONMENT == "local" and settings.EMAIL_BACKEND in ("", "console")
+    return code if local_console else None
+
+
 def _find_token(session: Session, raw: str, kind: str) -> tuple[MemberToken, Member] | None:
     row = session.execute(
         select(MemberToken, Member)
@@ -130,24 +161,24 @@ def _find_token(session: Session, raw: str, kind: str) -> tuple[MemberToken, Mem
     return None if row is None else (row[0], row[1])
 
 
-def verification_email(settings: Settings, to: str, token: str) -> EmailMessage:
-    url = f"{settings.web_url}/verificar-email?token={quote(token)}"
+def verification_email(settings: Settings, to: str, code: str) -> EmailMessage:
+    minutes = int(VERIFY_CODE_TTL.total_seconds() // 60)
     text = (
         "Olá!\n\n"
         "Recebemos um cadastro no Spillway com este e-mail.\n"
-        f"Para confirmar e liberar seu acesso gratuito, acesse (válido por 48 horas):\n{url}\n\n"
+        f"Seu código de verificação é: {code}\n\n"
+        f"Digite esse código na tela de cadastro. Ele vale por {minutes} minutos.\n"
         "Se não foi você, ignore este e-mail: nada será ativado.\n"
     )
     html = (
         "<p>Olá!</p>"
         "<p>Recebemos um cadastro no Spillway com este e-mail.</p>"
-        f'<p><a href="{url}">Confirmar e-mail e liberar o acesso gratuito</a> '
-        "(válido por 48 horas).</p>"
+        "<p>Seu código de verificação é:</p>"
+        f'<p style="font-size:28px;font-weight:700;letter-spacing:6px">{code}</p>'
+        f"<p>Digite esse código na tela de cadastro. Ele vale por {minutes} minutos.</p>"
         "<p>Se não foi você, ignore este e-mail: nada será ativado.</p>"
     )
-    return EmailMessage(
-        to=to, subject="Confirme seu e-mail para acessar o Spillway", text=text, html=html
-    )
+    return EmailMessage(to=to, subject=f"Seu código do Spillway: {code}", text=text, html=html)
 
 
 def existing_account_email(settings: Settings, to: str) -> EmailMessage:
@@ -189,12 +220,12 @@ def reset_email(settings: Settings, to: str, token: str) -> EmailMessage:
 @router.post(
     "/signup",
     status_code=status.HTTP_202_ACCEPTED,
-    response_model=MessageResponse,
+    response_model=SignupResponse,
     responses={429: {"description": "Rate limit exceeded"}},
 )
 def signup(
     body: MemberSignup, request: Request, session: SessionDep, background: BackgroundTasks
-) -> MessageResponse:
+) -> SignupResponse:
     _throttle(request, "signup")
     settings: Settings = request.app.state.settings
     sender: EmailSender = request.app.state.email_sender
@@ -207,7 +238,7 @@ def signup(
         log_event(session, request, category="auth", action="auth.signup_existing")
         session.commit()
         background.add_task(send_safely, sender, existing_account_email(settings, email))
-        return MessageResponse(message=ACCEPTED_MESSAGE)
+        return SignupResponse(message=ACCEPTED_MESSAGE)
     if existing is not None:
         _delete_member(session, existing)
         session.flush()
@@ -247,7 +278,7 @@ def signup(
     )
     session.add(member)
     session.flush()
-    token = _issue_token(session, member, "verify", VERIFY_TTL)
+    code = _issue_code(session, member)
     log_event(
         session,
         request,
@@ -269,23 +300,44 @@ def signup(
         session.commit()
     except IntegrityError:
         session.rollback()
-        return MessageResponse(message=ACCEPTED_MESSAGE)
-    background.add_task(send_safely, sender, verification_email(settings, email, token))
-    return MessageResponse(message=ACCEPTED_MESSAGE)
+        return SignupResponse(message=ACCEPTED_MESSAGE)
+    background.add_task(send_safely, sender, verification_email(settings, email, code))
+    return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
 
 
 @router.post("/verify-email", response_model=VerifiedResponse)
-def verify_email(body: TokenOnly, request: Request, session: SessionDep) -> VerifiedResponse:
-    _throttle(request, "verify")
-    found = _find_token(session, body.token, "verify")
-    if found is None:
-        raise HTTPException(status_code=400, detail=INVALID_LINK)
-    token, member = found
+def verify_email(
+    body: EmailVerification, request: Request, session: SessionDep
+) -> VerifiedResponse:
+    email = str(body.email).strip().lower()
+    _throttle(request, "verify", email)
+    member = session.scalars(select(Member).where(Member.email == email)).first()
+    if member is None or member.email_verified_at is not None:
+        raise HTTPException(status_code=400, detail=INVALID_CODE)
+    token = session.scalars(
+        select(MemberToken)
+        .where(
+            MemberToken.member_id == member.id,
+            MemberToken.kind == "verify",
+            MemberToken.used_at.is_(None),
+        )
+        .order_by(MemberToken.id.desc())
+    ).first()
     now = datetime.now(UTC)
-    if member.email_verified_at is not None:
-        return VerifiedResponse(verified=True)
-    if token.used_at is not None or _aware(token.expires_at) <= now:
-        raise HTTPException(status_code=400, detail=INVALID_LINK)
+    if token is None or _aware(token.expires_at) <= now or token.attempts >= MAX_CODE_ATTEMPTS:
+        raise HTTPException(status_code=400, detail=INVALID_CODE)
+    if not hmac.compare_digest(token.token_hash, _code_hash(member, body.code)):
+        token.attempts += 1
+        log_event(
+            session,
+            request,
+            category="auth",
+            action="auth.verify_failed",
+            member=member,
+            properties={"attempts": token.attempts},
+        )
+        session.commit()
+        raise HTTPException(status_code=400, detail=INVALID_CODE)
     token.used_at = now
     member.email_verified_at = now
     log_event(session, request, category="auth", action="auth.verify", member=member)
@@ -293,23 +345,24 @@ def verify_email(body: TokenOnly, request: Request, session: SessionDep) -> Veri
     return VerifiedResponse(verified=True)
 
 
-@router.post("/resend-verification", status_code=202, response_model=MessageResponse)
+@router.post("/resend-verification", status_code=202, response_model=SignupResponse)
 def resend_verification(
     body: EmailOnly, request: Request, session: SessionDep, background: BackgroundTasks
-) -> MessageResponse:
+) -> SignupResponse:
     email = str(body.email).strip().lower()
     _throttle(request, "resend", email)
     settings: Settings = request.app.state.settings
     sender: EmailSender = request.app.state.email_sender
     member = session.scalars(select(Member).where(Member.email == email)).first()
     if member is not None and member.email_verified_at is None:
-        token = _issue_token(session, member, "verify", VERIFY_TTL)
+        code = _issue_code(session, member)
         log_event(
             session, request, category="auth", action="auth.resend_verification", member=member
         )
         session.commit()
-        background.add_task(send_safely, sender, verification_email(settings, email, token))
-    return MessageResponse(message=ACCEPTED_MESSAGE)
+        background.add_task(send_safely, sender, verification_email(settings, email, code))
+        return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
+    return SignupResponse(message=ACCEPTED_MESSAGE)
 
 
 @router.post(

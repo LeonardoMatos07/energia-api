@@ -23,6 +23,7 @@ from sqlalchemy import (
     Uuid,
     extract,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -321,6 +322,9 @@ class MemberToken(Base):
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     created_at: Mapped[datetime] = _now_default()
 
 
