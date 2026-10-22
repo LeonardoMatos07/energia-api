@@ -460,3 +460,25 @@ def test_purge_removes_only_old_events(
     assert response.json() == {"deleted": 1, "older_than_days": 730}
     session.expire_all()
     assert session.scalar(select(func.count()).select_from(UsageEvent)) == (before or 0) - 1
+
+
+def test_burst_of_identical_page_views_is_stored_once(client: TestClient, session: Session) -> None:
+    def view(query: dict[str, str]) -> None:
+        client.post(
+            "/v1/events",
+            json={
+                "session_key": "burst",
+                "events": [
+                    {"category": "page", "action": "page.view", "path": "/painel", "query": query}
+                ],
+            },
+        )
+
+    view({"de": "2026-01", "ate": "2026-09"})
+    view({"de": "2026-01", "ate": "2026-09"})
+    view({"de": "2026-06", "ate": "2026-09"})
+    stored = events(session, action="page.view")
+    assert [event.properties for event in stored] == [
+        {"de": "2026-01", "ate": "2026-09"},
+        {"de": "2026-06", "ate": "2026-09"},
+    ]

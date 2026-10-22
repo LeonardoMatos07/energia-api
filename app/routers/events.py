@@ -1,18 +1,44 @@
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.db import SessionDep
 from app.events import EventContext, build_event, classify_path, context_from_request, trusted_web
+from app.models import UsageEvent
 from app.routers.auth import member_from_token
 from app.schemas import EventBatch, EventsAccepted
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/events", tags=["events"])
+
+DUPLICATE_WINDOW = timedelta(seconds=2)
+
+
+def is_duplicate_view(
+    session: Session,
+    context: EventContext,
+    action: str,
+    path: str | None,
+    properties: dict[str, object],
+) -> bool:
+    if context.session_key is None:
+        return False
+    recent = session.scalars(
+        select(UsageEvent.properties).where(
+            UsageEvent.category == "page",
+            UsageEvent.session_key == context.session_key,
+            UsageEvent.action == action,
+            UsageEvent.path == path,
+            UsageEvent.occurred_at >= datetime.now(UTC) - DUPLICATE_WINDOW,
+        )
+    ).all()
+    return any(row == properties for row in recent)
 
 
 def store_events(factory: sessionmaker[Session], context: EventContext, batch: EventBatch) -> None:
@@ -21,6 +47,10 @@ def store_events(factory: sessionmaker[Session], context: EventContext, batch: E
             for item in batch.events:
                 classification = classify_path(item.path or "", item.query)
                 properties = {**classification.properties, **item.properties}
+                if item.category == "page" and is_duplicate_view(
+                    session, context, item.action, item.path, properties
+                ):
+                    continue
                 session.add(
                     build_event(
                         context,
