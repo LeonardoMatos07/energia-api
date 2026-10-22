@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db import SessionDep
 from app.email import EmailMessage, EmailSender, send_safely
+from app.events import log_event
 from app.models import NewsletterSubscriber
 from app.ratelimit import RateLimiter
 from app.schemas import (
@@ -139,6 +140,13 @@ def subscribe(
     subscriber.confirmation_token_expires_at = now + CONFIRMATION_TTL
     subscriber.unsubscribe_token_hash = unsubscribe_hash
     subscriber.signup_source = body.source
+    log_event(
+        session,
+        request,
+        category="newsletter",
+        action="newsletter.subscribe",
+        properties={"source": body.source},
+    )
     try:
         session.commit()
     except IntegrityError:
@@ -155,7 +163,7 @@ def subscribe(
 @router.get(
     "/confirm", response_model=ConfirmedResponse, responses={400: {"description": INVALID_LINK}}
 )
-def confirm(session: SessionDep, token: TokenQuery) -> ConfirmedResponse:
+def confirm(request: Request, session: SessionDep, token: TokenQuery) -> ConfirmedResponse:
     subscriber = session.scalars(
         select(NewsletterSubscriber).where(
             NewsletterSubscriber.confirmation_token_hash == hash_token(token)
@@ -170,6 +178,7 @@ def confirm(session: SessionDep, token: TokenQuery) -> ConfirmedResponse:
     if expires is None or _aware(expires) <= now or subscriber.unsubscribed_at is not None:
         raise HTTPException(status_code=400, detail=INVALID_LINK)
     subscriber.confirmed_at = now
+    log_event(session, request, category="newsletter", action="newsletter.confirm")
     session.commit()
     return ConfirmedResponse(confirmed=True)
 
@@ -179,7 +188,7 @@ def confirm(session: SessionDep, token: TokenQuery) -> ConfirmedResponse:
     response_model=UnsubscribedResponse,
     responses={400: {"description": INVALID_LINK}},
 )
-def unsubscribe(session: SessionDep, token: TokenQuery) -> UnsubscribedResponse:
+def unsubscribe(request: Request, session: SessionDep, token: TokenQuery) -> UnsubscribedResponse:
     subscriber = session.scalars(
         select(NewsletterSubscriber).where(
             NewsletterSubscriber.unsubscribe_token_hash == hash_token(token)
@@ -189,5 +198,6 @@ def unsubscribe(session: SessionDep, token: TokenQuery) -> UnsubscribedResponse:
         raise HTTPException(status_code=400, detail=INVALID_LINK)
     if subscriber.unsubscribed_at is None:
         subscriber.unsubscribed_at = datetime.now(UTC)
+        log_event(session, request, category="newsletter", action="newsletter.unsubscribe")
         session.commit()
     return UnsubscribedResponse(unsubscribed=True)

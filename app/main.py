@@ -17,6 +17,7 @@ from app.routers import (
     admin,
     auth,
     curtailment,
+    events,
     health,
     newsletter,
     plants,
@@ -82,7 +83,17 @@ def create_app(
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
 
-    for module in (curtailment, plants, rankings, reports, newsletter, auth, admin, health):
+    for module in (
+        curtailment,
+        plants,
+        rankings,
+        reports,
+        newsletter,
+        auth,
+        events,
+        admin,
+        health,
+    ):
         app.include_router(module.router)
     return app
 

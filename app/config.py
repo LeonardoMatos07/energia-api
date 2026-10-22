@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     AUTH_RATE_LIMIT_PER_MINUTE: int = Field(default=10, ge=1)
     TRUST_X_FORWARDED_FOR: bool = False
     WEB_API_SECRET: str = ""
+    EVENT_HASH_SECRET: str = ""
+    EVENT_RETENTION_DAYS: int = Field(default=730, ge=30)
 
     @model_validator(mode="after")
     def _check_environment(self) -> Self:
@@ -48,6 +50,9 @@ class Settings(BaseSettings):
                 name
                 for name in ("COGNITO_USER_POOL_ID", "COGNITO_APP_CLIENT_IDS")
                 if not getattr(self, name)
+            ]
+            missing += [
+                name for name in ("WEB_API_SECRET", "EVENT_HASH_SECRET") if not getattr(self, name)
             ]
             if missing:
                 raise ValueError(f"required in prod: {', '.join(missing)}")

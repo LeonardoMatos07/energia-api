@@ -442,3 +442,144 @@ class Lead(MemberProfile):
 class LeadListResponse(BaseModel):
     items: list[Lead]
     total: int
+
+
+EventCategory = Literal["page", "interaction", "auth", "newsletter", "admin", "system"]
+IngestCategory = Literal["page", "interaction"]
+ACTION_PATTERN = r"^[a-z0-9_.:-]{1,80}$"
+
+
+class EventInput(BaseModel):
+    category: IngestCategory = "interaction"
+    action: str = Field(pattern=ACTION_PATTERN)
+    path: str | None = Field(default=None, max_length=512)
+    query: dict[str, str] | None = None
+    section: str | None = Field(default=None, max_length=40)
+    entity_type: str | None = Field(default=None, max_length=40)
+    entity_id: str | None = Field(default=None, max_length=200)
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class EventBatch(BaseModel):
+    events: list[EventInput] = Field(min_length=1, max_length=50)
+    visitor_id: str | None = Field(default=None, max_length=64)
+    session_key: str | None = Field(default=None, max_length=64)
+    user_agent: str | None = Field(default=None, max_length=300)
+    referrer: str | None = Field(default=None, max_length=512)
+    request_id: str | None = Field(default=None, max_length=64)
+
+
+class EventsAccepted(BaseModel):
+    accepted: int
+
+
+class UsageTotals(BaseModel):
+    events: int
+    page_views: int
+    members_active: int
+    visitors: int
+    sessions: int
+    new_members: int
+
+
+class DailyUsage(BaseModel):
+    day: date
+    page_views: int
+    interactions: int
+    members: int
+
+
+class SectionUsage(BaseModel):
+    section: str
+    views: int
+    members: int
+
+
+class EntityUsage(BaseModel):
+    entity_type: str
+    entity_id: str
+    views: int
+    members: int
+
+
+class CountItem(BaseModel):
+    name: str
+    count: int
+
+
+class FunnelStep(BaseModel):
+    step: str
+    count: int
+
+
+class RoleUsage(BaseModel):
+    role: str | None
+    segment: str | None
+    members: int
+    events: int
+
+
+class ActiveLead(BaseModel):
+    member_id: uuid.UUID
+    name: str
+    email: str
+    organization: str | None
+    role: str
+    lead_tier: str
+    lead_score: int
+    events: int
+    last_seen: datetime | None
+
+
+class UsageSummary(BaseModel):
+    start: datetime
+    end: datetime
+    days: int
+    include_bots: bool
+    totals: UsageTotals
+    daily: list[DailyUsage]
+    sections: list[SectionUsage]
+    entities: list[EntityUsage]
+    searches: list[CountItem]
+    interactions: list[CountItem]
+    compared: list[CountItem]
+    funnel: list[FunnelStep]
+    roles: list[RoleUsage]
+    active_leads: list[ActiveLead]
+
+
+class UsageEventOut(_Orm):
+    id: int
+    occurred_at: datetime
+    category: str
+    action: str
+    section: str | None
+    entity_type: str | None
+    entity_id: str | None
+    path: str | None
+    properties: dict[str, Any]
+    member_id: uuid.UUID | None
+    member_role: str | None
+    member_segment: str | None
+    visitor_id: str | None
+    session_key: str | None
+    device: str | None
+    is_bot: bool
+    referrer: str | None
+    request_id: str | None
+
+
+class UsageEventList(BaseModel):
+    items: list[UsageEventOut]
+    total: int
+
+
+class MemberTimeline(BaseModel):
+    member: Lead
+    events: list[UsageEventOut]
+    total: int
+
+
+class PurgeResponse(BaseModel):
+    deleted: int
+    older_than_days: int

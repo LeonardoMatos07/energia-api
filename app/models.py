@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     CHAR,
@@ -23,6 +24,7 @@ from sqlalchemy import (
     extract,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NAMING_CONVENTION = {
@@ -211,6 +213,48 @@ class AppUser(Base):
     )
     role: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = _now_default()
+
+
+JsonDocument = JSON().with_variant(JSONB(), "postgresql")
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_event"
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    occurred_at: Mapped[datetime] = _now_default()
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    section: Mapped[str | None] = mapped_column(Text)
+    entity_type: Mapped[str | None] = mapped_column(Text)
+    entity_id: Mapped[str | None] = mapped_column(Text)
+    path: Mapped[str | None] = mapped_column(Text)
+    properties: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False, default=dict)
+    member_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    member_role: Mapped[str | None] = mapped_column(Text)
+    member_segment: Mapped[str | None] = mapped_column(Text)
+    visitor_id: Mapped[str | None] = mapped_column(Text)
+    session_key: Mapped[str | None] = mapped_column(Text)
+    ip_hash: Mapped[str | None] = mapped_column(Text)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    device: Mapped[str | None] = mapped_column(Text)
+    is_bot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    referrer: Mapped[str | None] = mapped_column(Text)
+    request_id: Mapped[str | None] = mapped_column(Text)
+
+
+Index("ix_usage_event_occurred_at", UsageEvent.occurred_at)
+Index("ix_usage_event_member_id_occurred_at", UsageEvent.member_id, UsageEvent.occurred_at)
+Index(
+    "ix_usage_event_category_action_occurred_at",
+    UsageEvent.category,
+    UsageEvent.action,
+    UsageEvent.occurred_at,
+)
+Index("ix_usage_event_section_occurred_at", UsageEvent.section, UsageEvent.occurred_at)
+Index("ix_usage_event_entity", UsageEvent.entity_type, UsageEvent.entity_id)
 
 
 class HourlyCurtailment(Base):

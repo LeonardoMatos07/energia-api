@@ -61,9 +61,11 @@ Read from the environment or from `.env` (see [`.env.example`](.env.example)).
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` | empty, `587`, empty, empty, `true` | used when `EMAIL_BACKEND=smtp`; port 465 uses implicit TLS |
 | `CACHE_TTL_SECONDS` | `300` | in-memory cache of the public routes (0 disables it) |
 | `NEWSLETTER_RATE_LIMIT_PER_MINUTE` | `5` | per IP and per instance |
+| `EVENT_HASH_SECRET` | empty | key used to hash IP addresses in the usage log; required in `prod` |
+| `EVENT_RETENTION_DAYS` | `730` | default age for `POST /v1/admin/usage/purge` |
 | `AUTH_RATE_LIMIT_PER_MINUTE` | `10` | sign-up, login, reset and verification attempts, per IP and per e-mail |
 | `TRUST_X_FORWARDED_FOR` | `false` | `true` only behind the ALB (uses the rightmost entry) |
-| `WEB_API_SECRET` | empty | secret shared with the `energia-web` server; with it, the IP in `X-Client-IP` counts for the newsletter limit |
+| `WEB_API_SECRET` | empty | secret shared with the `energia-web` server: it trusts `X-Client-IP` and is required to send usage events; required in `prod` |
 
 ## Migrations
 
@@ -130,6 +132,32 @@ policy, required; contact, optional). `score_lead` (`app/leads.py`) turns it int
 Passwords use scrypt with a per-user salt; tokens are random and only their SHA-256 is stored.
 `energia-web` keeps the session token in an `httpOnly` cookie and gates the pages. The data routes
 stay public, so the gate is about lead capture, not about protecting the data.
+
+## Usage log
+
+Every page, filter, search, comparison and sign-in step is recorded in `usage_event`, so the free
+phase can be measured. `energia-web` sends the events (`POST /v1/events`, protected by
+`WEB_API_SECRET`, resolves the member from the session token); the API writes the auth,
+newsletter and admin events itself.
+
+| Field | Meaning |
+|---|---|
+| `category` | `page`, `interaction`, `auth`, `newsletter`, `admin` |
+| `action` | `page.view`, `page.gated`, `page.engagement`, `chart.kind_change`, `compare.configure`, `search.plants`, `auth.signup`, `auth.login`, `auth.login_failed`, `newsletter.subscribe`, `admin.report_saved`, ... |
+| `section`, `entity_type`, `entity_id` | derived from the path by `app/events.py`: `estados` + `state` + `BA`, `usinas` + `plant` + slug, `comparar` + `comparison` + the chosen items |
+| `properties` | the filters in the URL (`de`, `ate`, `fonte`, ...) and the details of the interaction |
+| `member_id`, `member_role`, `member_segment` | who did it, with the role and segment at that moment |
+| `visitor_id`, `session_key` | first-party cookies, so the steps before sign-up can be linked |
+| `ip_hash`, `user_agent`, `device`, `is_bot`, `referrer` | IP only as a keyed hash; bots are flagged and left out of the statistics |
+
+Only an allow-list of query parameters is stored, so tokens in links never reach the log. Deleting
+an account unlinks its events (`member_id`, visitor, IP hash and user agent are cleared).
+
+Admin routes (Cognito admin token): `GET /v1/admin/usage/summary?days=30` (totals, daily series,
+sections, top states/plants/reports, searches, compared items, interactions, sign-up funnel,
+roles, active hot and warm leads), `GET /v1/admin/usage/events` (filters: `days`, `action`,
+`section`, `member_id`), `GET /v1/admin/usage/events.csv` (raw export), `GET
+/v1/admin/usage/members/{id}` (one person's timeline) and `POST /v1/admin/usage/purge`.
 
 ### Sending e-mail before SES
 

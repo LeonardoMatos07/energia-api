@@ -3,15 +3,16 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionDep
 from app.email import EmailMessage, EmailSender, send_safely
+from app.events import log_event
 from app.leads import score_lead
-from app.models import Member, MemberSession, MemberToken
+from app.models import Member, MemberSession, MemberToken, UsageEvent
 from app.ratelimit import RateLimiter
 from app.routers.newsletter import client_ip
 from app.schemas import (
@@ -64,21 +65,28 @@ def _bearer(authorization: str | None) -> str | None:
     return None
 
 
-def get_current_member(
-    session: SessionDep, authorization: Annotated[str | None, Header()] = None
-) -> Member:
+def member_from_token(session: Session, authorization: str | None) -> Member | None:
     token = _bearer(authorization)
     if token is None:
-        raise HTTPException(status_code=401, detail=UNAUTHORIZED)
+        return None
     row = session.execute(
         select(Member, MemberSession)
         .join(MemberSession, MemberSession.member_id == Member.id)
         .where(MemberSession.token_hash == hash_token(token))
     ).first()
     if row is None:
-        raise HTTPException(status_code=401, detail=UNAUTHORIZED)
+        return None
     member, member_session = row
     if _aware(member_session.expires_at) <= datetime.now(UTC) or member.email_verified_at is None:
+        return None
+    return member
+
+
+def get_current_member(
+    session: SessionDep, authorization: Annotated[str | None, Header()] = None
+) -> Member:
+    member = member_from_token(session, authorization)
+    if member is None:
         raise HTTPException(status_code=401, detail=UNAUTHORIZED)
     return member
 
@@ -87,6 +95,11 @@ CurrentMember = Annotated[Member, Depends(get_current_member)]
 
 
 def _delete_member(session: Session, member: Member) -> None:
+    session.execute(
+        update(UsageEvent)
+        .where(UsageEvent.member_id == member.id)
+        .values(member_id=None, visitor_id=None, ip_hash=None, user_agent=None)
+    )
     session.execute(delete(MemberToken).where(MemberToken.member_id == member.id))
     session.execute(delete(MemberSession).where(MemberSession.member_id == member.id))
     session.delete(member)
@@ -191,6 +204,8 @@ def signup(
 
     existing = session.scalars(select(Member).where(Member.email == email)).first()
     if existing is not None and existing.email_verified_at is not None:
+        log_event(session, request, category="auth", action="auth.signup_existing")
+        session.commit()
         background.add_task(send_safely, sender, existing_account_email(settings, email))
         return MessageResponse(message=ACCEPTED_MESSAGE)
     if existing is not None:
@@ -233,6 +248,23 @@ def signup(
     session.add(member)
     session.flush()
     token = _issue_token(session, member, "verify", VERIFY_TTL)
+    log_event(
+        session,
+        request,
+        category="auth",
+        action="auth.signup",
+        member=member,
+        properties={
+            "lead_tier": tier,
+            "lead_score": score,
+            "regions": body.regions,
+            "plants": len(body.plants),
+            "interests": body.interests,
+            "referral": body.referral,
+            "marketing_opt_in": body.marketing_opt_in,
+            "source": body.source,
+        },
+    )
     try:
         session.commit()
     except IntegrityError:
@@ -256,6 +288,7 @@ def verify_email(body: TokenOnly, request: Request, session: SessionDep) -> Veri
         raise HTTPException(status_code=400, detail=INVALID_LINK)
     token.used_at = now
     member.email_verified_at = now
+    log_event(session, request, category="auth", action="auth.verify", member=member)
     session.commit()
     return VerifiedResponse(verified=True)
 
@@ -271,6 +304,9 @@ def resend_verification(
     member = session.scalars(select(Member).where(Member.email == email)).first()
     if member is not None and member.email_verified_at is None:
         token = _issue_token(session, member, "verify", VERIFY_TTL)
+        log_event(
+            session, request, category="auth", action="auth.resend_verification", member=member
+        )
         session.commit()
         background.add_task(send_safely, sender, verification_email(settings, email, token))
     return MessageResponse(message=ACCEPTED_MESSAGE)
@@ -289,8 +325,26 @@ def login(body: MemberLogin, request: Request, session: SessionDep) -> LoginResp
         body.password, member.password_hash if member is not None else DUMMY_HASH
     )
     if member is None or not password_ok:
+        log_event(
+            session,
+            request,
+            category="auth",
+            action="auth.login_failed",
+            member=member,
+            properties={"reason": "invalid_credentials"},
+        )
+        session.commit()
         raise HTTPException(status_code=401, detail=INVALID_CREDENTIALS)
     if member.email_verified_at is None:
+        log_event(
+            session,
+            request,
+            category="auth",
+            action="auth.login_failed",
+            member=member,
+            properties={"reason": "unverified"},
+        )
+        session.commit()
         raise HTTPException(status_code=403, detail=UNVERIFIED)
 
     now = datetime.now(UTC)
@@ -303,6 +357,7 @@ def login(body: MemberLogin, request: Request, session: SessionDep) -> LoginResp
     )
     session.add(MemberSession(member_id=member.id, token_hash=token_hash, expires_at=expires_at))
     member.last_login_at = now
+    log_event(session, request, category="auth", action="auth.login", member=member)
     session.commit()
     return LoginResponse(
         session_token=token, expires_at=expires_at, member=MemberProfile.model_validate(member)
@@ -316,11 +371,15 @@ def me(member: CurrentMember) -> MemberProfile:
 
 @router.post("/logout", response_model=MessageResponse)
 def logout(
-    session: SessionDep, authorization: Annotated[str | None, Header()] = None
+    request: Request,
+    session: SessionDep,
+    authorization: Annotated[str | None, Header()] = None,
 ) -> MessageResponse:
     token = _bearer(authorization)
     if token is not None:
+        member = member_from_token(session, authorization)
         session.execute(delete(MemberSession).where(MemberSession.token_hash == hash_token(token)))
+        log_event(session, request, category="auth", action="auth.logout", member=member)
         session.commit()
     return MessageResponse(message="Signed out.")
 
@@ -336,6 +395,9 @@ def forgot_password(
     member = session.scalars(select(Member).where(Member.email == email)).first()
     if member is not None and member.email_verified_at is not None:
         token = _issue_token(session, member, "reset", RESET_TTL)
+        log_event(
+            session, request, category="auth", action="auth.password_reset_requested", member=member
+        )
         session.commit()
         background.add_task(send_safely, sender, reset_email(settings, email, token))
     return MessageResponse(message=ACCEPTED_MESSAGE)
@@ -356,6 +418,7 @@ def reset_password(body: PasswordReset, request: Request, session: SessionDep) -
     if member.email_verified_at is None:
         member.email_verified_at = now
     session.execute(delete(MemberSession).where(MemberSession.member_id == member.id))
+    log_event(session, request, category="auth", action="auth.password_reset", member=member)
     session.commit()
     return MessageResponse(message="Password updated.")
 
@@ -367,6 +430,14 @@ def delete_account(
     _throttle(request, "delete", str(member.id))
     if not verify_password(body.password, member.password_hash):
         raise HTTPException(status_code=403, detail=INVALID_CREDENTIALS)
+    log_event(
+        session,
+        request,
+        category="auth",
+        action="auth.account_deleted",
+        properties={"role": member.role, "lead_tier": member.lead_tier},
+        anonymous=True,
+    )
     _delete_member(session, member)
     session.commit()
     return MessageResponse(message="Account deleted.")
