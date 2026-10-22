@@ -197,6 +197,215 @@
         }
       }
     },
+    "/v1/curtailment/summary": {
+      "get": {
+        "tags": [
+          "curtailment"
+        ],
+        "summary": "Summary",
+        "operationId": "summary_v1_curtailment_summary_get",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2,3}$",
+              "description": "SIN, a subsystem (N, NE, S, SE) or a state code.",
+              "examples": [
+                "SIN"
+              ],
+              "default": "SIN",
+              "title": "Scope"
+            },
+            "description": "SIN, a subsystem (N, NE, S, SE) or a state code."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurtailmentSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/curtailment/hourly": {
+      "get": {
+        "tags": [
+          "curtailment"
+        ],
+        "summary": "Hourly",
+        "operationId": "hourly_v1_curtailment_hourly_get",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "N",
+                "NE",
+                "S",
+                "SE",
+                "SIN"
+              ],
+              "type": "string",
+              "default": "SIN",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HourlyProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/plants": {
       "get": {
         "tags": [
@@ -488,6 +697,206 @@
         }
       }
     },
+    "/v1/rankings/operators": {
+      "get": {
+        "tags": [
+          "rankings"
+        ],
+        "summary": "Operators",
+        "operationId": "operators_v1_rankings_operators_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupRankingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/rankings/connection-points": {
+      "get": {
+        "tags": [
+          "rankings"
+        ],
+        "summary": "Connection Points",
+        "operationId": "connection_points_v1_rankings_connection_points_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupRankingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/reports": {
       "get": {
         "tags": [
@@ -687,6 +1096,421 @@
         }
       }
     },
+    "/v1/auth/signup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signup",
+        "operationId": "signup_v1_auth_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberSignup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/verify-email": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify Email",
+        "operationId": "verify_email_v1_auth_verify_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenOnly"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifiedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Resend Verification",
+        "operationId": "resend_verification_v1_auth_resend_verification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailOnly"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid e-mail or password."
+          },
+          "403": {
+            "description": "Email not verified."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me_v1_auth_me_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_v1_auth_logout_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Forgot Password",
+        "operationId": "forgot_password_v1_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailOnly"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/reset-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Reset Password",
+        "operationId": "reset_password_v1_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordReset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me/delete": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Delete Account",
+        "operationId": "delete_account_v1_auth_me_delete_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordConfirmation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/load-runs": {
       "get": {
         "tags": [
@@ -860,6 +1684,77 @@
         ]
       }
     },
+    "/v1/admin/leads": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Leads",
+        "operationId": "list_leads_v1_admin_leads_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tier",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "hot",
+                    "warm",
+                    "cold"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tier"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -992,6 +1887,207 @@
         ],
         "title": "ConfirmedResponse"
       },
+      "CurtailmentSummary": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar",
+              "total"
+            ],
+            "title": "Source"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "months": {
+            "type": "integer",
+            "title": "Months"
+          },
+          "verified_generation_mwh": {
+            "type": "number",
+            "title": "Verified Generation Mwh"
+          },
+          "curtailed_mwh": {
+            "type": "number",
+            "title": "Curtailed Mwh"
+          },
+          "curtailed_rel_mwh": {
+            "type": "number",
+            "title": "Curtailed Rel Mwh"
+          },
+          "curtailed_cnf_mwh": {
+            "type": "number",
+            "title": "Curtailed Cnf Mwh"
+          },
+          "curtailed_ene_mwh": {
+            "type": "number",
+            "title": "Curtailed Ene Mwh"
+          },
+          "curtailed_other_mwh": {
+            "type": "number",
+            "title": "Curtailed Other Mwh"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          },
+          "estimated_loss_brl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Loss Brl"
+          },
+          "affected_plants": {
+            "type": "integer",
+            "title": "Affected Plants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "source",
+          "start",
+          "end",
+          "months",
+          "verified_generation_mwh",
+          "curtailed_mwh",
+          "curtailed_rel_mwh",
+          "curtailed_cnf_mwh",
+          "curtailed_ene_mwh",
+          "curtailed_other_mwh",
+          "curtailment_pct",
+          "estimated_loss_brl",
+          "affected_plants"
+        ],
+        "title": "CurtailmentSummary"
+      },
+      "EmailOnly": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "EmailOnly"
+      },
+      "GroupRankingResponse": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "enum": [
+              "operator",
+              "connection_point"
+            ],
+            "title": "Group"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar",
+              "total"
+            ],
+            "title": "Source"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RankedGroup"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "source",
+          "start",
+          "end",
+          "items"
+        ],
+        "title": "GroupRankingResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1022,6 +2118,361 @@
           "database"
         ],
         "title": "HealthResponse"
+      },
+      "HourlyPoint": {
+        "properties": {
+          "day_type": {
+            "type": "string",
+            "enum": [
+              "weekday",
+              "weekend"
+            ],
+            "title": "Day Type"
+          },
+          "hour": {
+            "type": "integer",
+            "title": "Hour"
+          },
+          "avg_curtailed_mwh": {
+            "type": "number",
+            "title": "Avg Curtailed Mwh"
+          },
+          "avg_generation_mwh": {
+            "type": "number",
+            "title": "Avg Generation Mwh"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_type",
+          "hour",
+          "avg_curtailed_mwh",
+          "avg_generation_mwh",
+          "curtailment_pct"
+        ],
+        "title": "HourlyPoint"
+      },
+      "HourlyProfileResponse": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar",
+              "total"
+            ],
+            "title": "Source"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "months": {
+            "type": "integer",
+            "title": "Months"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/HourlyPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "source",
+          "start",
+          "end",
+          "months",
+          "points"
+        ],
+        "title": "HourlyProfileResponse"
+      },
+      "Lead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "researcher",
+              "student",
+              "professional",
+              "journalist",
+              "public_sector",
+              "investor",
+              "other"
+            ],
+            "title": "Role"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment"
+          },
+          "institution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution"
+          },
+          "regions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Regions"
+          },
+          "plants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Plants"
+          },
+          "interests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Interests"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "company_size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Size"
+          },
+          "study_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Level"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "referral": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral"
+          },
+          "signup_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signup Source"
+          },
+          "marketing_opt_in": {
+            "type": "boolean",
+            "title": "Marketing Opt In"
+          },
+          "email_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Verified At"
+          },
+          "lead_score": {
+            "type": "integer",
+            "title": "Lead Score"
+          },
+          "lead_tier": {
+            "type": "string",
+            "enum": [
+              "hot",
+              "warm",
+              "cold"
+            ],
+            "title": "Lead Tier"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "organization",
+          "job_title",
+          "segment",
+          "institution",
+          "regions",
+          "plants",
+          "interests",
+          "created_at",
+          "company_size",
+          "study_level",
+          "phone",
+          "referral",
+          "signup_source",
+          "marketing_opt_in",
+          "email_verified_at",
+          "lead_score",
+          "lead_tier",
+          "last_login_at"
+        ],
+        "title": "Lead"
+      },
+      "LeadListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Lead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "LeadListResponse"
       },
       "LoadRun": {
         "properties": {
@@ -1150,6 +2601,395 @@
         ],
         "title": "LoadRunListResponse"
       },
+      "LoginResponse": {
+        "properties": {
+          "session_token": {
+            "type": "string",
+            "title": "Session Token"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "member": {
+            "$ref": "#/components/schemas/MemberProfile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_token",
+          "expires_at",
+          "member"
+        ],
+        "title": "LoginResponse"
+      },
+      "MemberLogin": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "MemberLogin"
+      },
+      "MemberProfile": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "researcher",
+              "student",
+              "professional",
+              "journalist",
+              "public_sector",
+              "investor",
+              "other"
+            ],
+            "title": "Role"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment"
+          },
+          "institution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution"
+          },
+          "regions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Regions"
+          },
+          "plants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Plants"
+          },
+          "interests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Interests"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "organization",
+          "job_title",
+          "segment",
+          "institution",
+          "regions",
+          "plants",
+          "interests",
+          "created_at"
+        ],
+        "title": "MemberProfile"
+      },
+      "MemberSignup": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 10,
+            "title": "Password"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "researcher",
+              "student",
+              "professional",
+              "journalist",
+              "public_sector",
+              "investor",
+              "other"
+            ],
+            "title": "Role"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "generator",
+                  "storage_developer",
+                  "trader",
+                  "consultancy",
+                  "financial",
+                  "consumer",
+                  "utility",
+                  "equipment",
+                  "law_regulatory",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment"
+          },
+          "company_size": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "1-10",
+                  "11-50",
+                  "51-200",
+                  "201-1000",
+                  "1000+"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Size"
+          },
+          "institution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution"
+          },
+          "study_level": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "undergraduate",
+                  "master",
+                  "phd",
+                  "postdoc",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Level"
+          },
+          "regions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "Norte",
+                "Nordeste",
+                "Centro-Oeste",
+                "Sudeste",
+                "Sul"
+              ]
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Regions"
+          },
+          "plants": {
+            "items": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Plants"
+          },
+          "interests": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "monitor_losses",
+                "compensation",
+                "storage",
+                "free_market",
+                "investment",
+                "data_api",
+                "research",
+                "press"
+              ]
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Interests"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9+()\\-\\s]{8,20}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "referral": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral"
+          },
+          "marketing_opt_in": {
+            "type": "boolean",
+            "title": "Marketing Opt In",
+            "default": false
+          },
+          "consent": {
+            "type": "boolean",
+            "const": true,
+            "title": "Consent"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "name",
+          "role",
+          "consent"
+        ],
+        "title": "MemberSignup"
+      },
       "MessageResponse": {
         "properties": {
           "message": {
@@ -1215,6 +3055,43 @@
           "consent"
         ],
         "title": "NewsletterSignup"
+      },
+      "PasswordConfirmation": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "PasswordConfirmation"
+      },
+      "PasswordReset": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 10,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "PasswordReset"
       },
       "Plant": {
         "properties": {
@@ -1600,6 +3477,85 @@
           "capacity_mw"
         ],
         "title": "PlantSummary"
+      },
+      "RankedGroup": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "plants": {
+            "type": "integer",
+            "title": "Plants"
+          },
+          "affected_plants": {
+            "type": "integer",
+            "title": "Affected Plants"
+          },
+          "verified_generation_mwh": {
+            "type": "number",
+            "title": "Verified Generation Mwh"
+          },
+          "curtailed_mwh": {
+            "type": "number",
+            "title": "Curtailed Mwh"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          },
+          "estimated_loss_brl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Loss Brl"
+          },
+          "compensable_mwh": {
+            "type": "number",
+            "title": "Compensable Mwh"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "name",
+          "state",
+          "plants",
+          "affected_plants",
+          "verified_generation_mwh",
+          "curtailed_mwh",
+          "curtailment_pct",
+          "estimated_loss_brl",
+          "compensable_mwh"
+        ],
+        "title": "RankedGroup"
       },
       "RankedPlant": {
         "properties": {
@@ -2231,6 +4187,21 @@
         ],
         "title": "SubsystemCurtailmentResponse"
       },
+      "TokenOnly": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "TokenOnly"
+      },
       "UnsubscribedResponse": {
         "properties": {
           "unsubscribed": {
@@ -2283,6 +4254,19 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VerifiedResponse": {
+        "properties": {
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "verified"
+        ],
+        "title": "VerifiedResponse"
       }
     },
     "securitySchemes": {

@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import NewsletterSubscriber
-from app.routers.newsletter import hash_token, purge_stale_subscribers
+from app.routers.newsletter import purge_stale_subscribers
+from app.security import hash_token
 from tests.conftest import FakeEmailSender
 
 EMAIL = "Person@Example.com"
