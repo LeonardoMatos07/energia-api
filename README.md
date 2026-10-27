@@ -13,6 +13,8 @@ variables are defined there.
 | `energy-data` | Airflow: writes the tables and calls `POST /v1/admin/revalidate` after each load |
 | `energy-web` | Next.js: calls the API from the server; types generated from `app.export_openapi` |
 
+Design decisions shared by the four repositories are recorded as [ADRs](docs/adr/README.md).
+
 ## Stack
 
 Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL (psycopg 3), Pydantic Settings,
