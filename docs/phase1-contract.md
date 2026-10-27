@@ -1,14 +1,14 @@
 # Phase 1 contract
 
 Single source of truth between the four repositories. Any change here requires updating
-`energia-api` (the schema owner) first.
+`energy-api` (the schema owner) first.
 
 | Repository | Role |
 |---|---|
-| `energia-data` | Airflow: ingests ONS data, computes the aggregates and **only writes** to the tables below |
-| `energia-api` | FastAPI: **schema owner** (Alembic), public reads, newsletter, admin |
-| `energia-web` | Next.js: public portal with ISR, admin area |
-| `energia-infra` | Terraform: AWS `sa-east-1` |
+| `energy-data` | Airflow: ingests ONS data, computes the aggregates and **only writes** to the tables below |
+| `energy-api` | FastAPI: **schema owner** (Alembic), public reads, newsletter, admin |
+| `energy-web` | Next.js: public portal with ISR, admin area |
+| `energy-infra` | Terraform: AWS `sa-east-1` |
 
 ## Conventions
 
@@ -27,7 +27,7 @@ Single source of truth between the four repositories. Any change here requires u
 - Versions pinned exactly, published at least two weeks earlier.
 - No comments in the code.
 
-## Postgres schema (owner: `energia-api`, Alembic)
+## Postgres schema (owner: `energy-api`, Alembic)
 
 Postgres only keeps what the portal reads. The detailed history lives in S3.
 
@@ -150,7 +150,7 @@ periods.
   `name text NULL`, `organization_id uuid FK NULL`, `role text NOT NULL`
   (`owner`, `member`, `admin`), `created_at`.
 
-### How `energia-data` writes
+### How `energy-data` writes
 - `plant`: upsert by `id`.
 - `*_monthly_curtailment`: for each processed month, deletes the rows of that `month` and
   inserts the new ones, in one transaction (idempotent).
@@ -165,7 +165,7 @@ silver/<source>/year=YYYY/month=MM/data.parquet    standardized (and modelled, f
 gold/<table>/year=YYYY/month=MM/data.parquet       the same aggregates as Postgres
 ```
 
-## API (`energia-api`)
+## API (`energy-api`)
 
 Base `/v1`. JSON keys match the column names. `numeric` values are serialized as numbers.
 Public routes: no authentication, with `Cache-Control: public, max-age=300, s-maxage=3600,
@@ -189,7 +189,7 @@ out as `YYYY-MM`.
 | GET | `/v1/admin/load-runs?limit=50` | Admin | `{"items": [load_run row]}`, newest first; `limit` from 1 to 500; `period` as `YYYY-MM` (or null) |
 | GET | `/v1/admin/reports` | Admin | `{"items": [AdminReport]}`, all of them including drafts (`published_at` null), by `month` descending |
 | POST | `/v1/admin/reports` | Admin | `200 AdminReport`; creates or updates by `slug`; body `{"month": "YYYY-MM", "title", "slug"?, "summary"?, "content", "publish": bool}`. Optional `slug` (`^[a-z0-9]+(-[a-z0-9]+)*$`, up to 200); generated from `title` when missing. `publish: true` keeps the original publication date; `false` turns it back into a draft |
-| POST | `/v1/admin/revalidate` | Admin | optional body `{"tags": [...]}` (default: all; unknown tag = 422); clears the API cache and calls `energia-web`. Always 200 `RevalidateResponse`, even when `energia-web` fails |
+| POST | `/v1/admin/revalidate` | Admin | optional body `{"tags": [...]}` (default: all; unknown tag = 422); clears the API cache and calls `energy-web`. Always 200 `RevalidateResponse`, even when `energy-web` fails |
 | GET | `/health` | Internal | `{"status": "ok", "database": "ok"}` |
 
 Payloads:
@@ -200,7 +200,7 @@ Payloads:
   `AdminReport`: `Report` + `created_at, updated_at`
 - `RevalidateResponse`: `{"tags": [...], "cache_cleared": true, "entries_removed": n,
   "web_revalidated": bool, "detail": "..." | null}`. `web_revalidated = false` with `detail`
-  when `energia-web` did not answer 2xx or `REVALIDATE_SECRET` is not set.
+  when `energy-web` did not answer 2xx or `REVALIDATE_SECRET` is not set.
 
 ### Client IP for the newsletter limit
 
@@ -208,21 +208,21 @@ The 5/min limit is per IP and per API instance. The IP is chosen like this:
 
 1. When `WEB_API_SECRET` is set and the request carries an equal `X-Web-Api-Secret`
    (constant-time comparison), the IP in `X-Client-IP` (valid IPv4 or IPv6) is used. This is
-   how `energia-web`, which calls the API from its server (every visitor leaves through the
+   how `energy-web`, which calls the API from its server (every visitor leaves through the
    same Vercel IP), forwards the visitor IP.
 2. Otherwise, with `TRUST_X_FORWARDED_FOR=true`, the rightmost `X-Forwarded-For` entry (the
    one the ALB appends).
 3. Otherwise, the connection IP.
 
 `X-Client-IP` without the right secret is ignored. The secret only exists on the API and
-`energia-web` servers; it never reaches the browser.
+`energy-web` servers; it never reaches the browser.
 
 ## Authentication
 
 - Cognito User Pool, e-mail sign-in, mandatory MFA. `admin` group. Self sign-up disabled.
-- **Admin (person)**: `energia-web` signs in with OAuth + PKCE (Auth.js, Cognito provider),
+- **Admin (person)**: `energy-web` signs in with OAuth + PKCE (Auth.js, Cognito provider),
   session in an `httpOnly` cookie; it calls the API from the server with the *access token*.
-- **Machine (`energia-data` → API)**: app client with *client credentials* and the
+- **Machine (`energy-data` → API)**: app client with *client credentials* and the
   `energia-api` resource server with the `energia-api/admin` scope.
 - On `/v1/admin/*` the API accepts a Cognito JWT (RS256, pool JWKS, pool `iss`,
   `token_use = access`) that has the `admin` group in `cognito:groups` **or** the
@@ -232,11 +232,11 @@ The 5/min limit is per IP and per API instance. The IP is chosen like this:
 
 ## Portal revalidation
 
-1. After each load, `energia-data` calls `POST {API_URL}/v1/admin/revalidate` with
+1. After each load, `energy-data` calls `POST {API_URL}/v1/admin/revalidate` with
    `{"tags": ["curtailment", "plants"]}`.
 2. The API clears its own cache and calls `POST {WEB_URL}/api/revalidate` with the
    `x-revalidate-secret: {REVALIDATE_SECRET}` header and the same body.
-3. `energia-web` calls `revalidateTag` for each tag. Tags used by the `fetch` calls:
+3. `energy-web` calls `revalidateTag` for each tag. Tags used by the `fetch` calls:
    `curtailment`, `plants`, `reports`.
 
 ## Local environment
@@ -256,8 +256,8 @@ Main variables: `DATABASE_URL` (API), `WAREHOUSE_DSN` (data), `API_URL`, `WEB_UR
 ## CI/CD (GitHub Actions)
 
 - Every PR: lint, type checks and tests.
-- Merge to `main` on `energia-api` and `energia-data`: Docker image pushed to ECR (AWS
+- Merge to `main` on `energy-api` and `energy-data`: Docker image pushed to ECR (AWS
   authentication through OIDC) and deployed.
-- `energia-web`: deployed by Vercel (one preview per PR); CI runs lint, types and tests.
-- `energia-infra`: `terraform plan` on PRs; `apply` on `main` with manual approval
+- `energy-web`: deployed by Vercel (one preview per PR); CI runs lint, types and tests.
+- `energy-infra`: `terraform plan` on PRs; `apply` on `main` with manual approval
   (`production` environment with required reviewers).

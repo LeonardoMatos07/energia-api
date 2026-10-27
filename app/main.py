@@ -57,7 +57,7 @@ def create_app(
     engine = engine or make_engine(settings.database_url)
 
     app = FastAPI(
-        title="energia-api",
+        title="energy-api",
         version="0.1.0",
         description="Public and admin API of the energy data platform (Phase 1).",
     )

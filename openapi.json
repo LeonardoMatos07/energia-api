@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "energia-api",
+    "title": "energy-api",
     "description": "Public and admin API of the energy data platform (Phase 1).",
     "version": "0.1.0"
   },

@@ -1,4 +1,4 @@
-# energia-api
+# energy-api
 
 HTTP API of the energy data platform. In Phase 1 it serves the public wind and solar
 *curtailment* monitor for Brazil: series per SIN/subsystem and state, plants, ranking, monthly
@@ -10,8 +10,8 @@ variables are defined there.
 
 | Repository | Relationship with the API |
 |---|---|
-| `energia-data` | Airflow: writes the tables and calls `POST /v1/admin/revalidate` after each load |
-| `energia-web` | Next.js: calls the API from the server; types generated from `app.export_openapi` |
+| `energy-data` | Airflow: writes the tables and calls `POST /v1/admin/revalidate` after each load |
+| `energy-web` | Next.js: calls the API from the server; types generated from `app.export_openapi` |
 
 ## Stack
 
@@ -20,7 +20,7 @@ PyJWT (Cognito), boto3 (SES). Tooling: `uv`, `ruff`, `mypy` (strict), `pytest`.
 
 ## Running locally
 
-Requirements: [uv](https://docs.astral.sh/uv/) and the `energia-data` Postgres
+Requirements: [uv](https://docs.astral.sh/uv/) and the `energy-data` Postgres
 (`localhost:5433`, database `warehouse`).
 
 ```sh
@@ -34,7 +34,7 @@ uv run uvicorn app.main:app --reload --port 8000
 only needed when the schema has not been applied yet (see Migrations).
 
 Interactive docs at `http://localhost:8000/docs`. To export the OpenAPI document used by
-`energia-web`:
+`energy-web`:
 
 ```sh
 uv run python -m app.export_openapi openapi.json
@@ -49,8 +49,8 @@ Read from the environment or from `.env` (see [`.env.example`](.env.example)).
 | `ENVIRONMENT` | `local` | `local` or `prod`. In `prod`, e-mail goes through SES and Cognito is required |
 | `DATABASE_URL` | `postgresql+psycopg://warehouse:warehouse@localhost:5433/warehouse` | `postgresql://` is accepted |
 | `WEB_URL` | `http://localhost:3000` | e-mail links, CORS and revalidation target |
-| `REVALIDATE_SECRET` | empty | sent to `energia-web` in `x-revalidate-secret`; empty = web is not called |
-| `REVALIDATE_TIMEOUT_SECONDS` | `5` | timeout of the call to `energia-web` |
+| `REVALIDATE_SECRET` | empty | sent to `energy-web` in `x-revalidate-secret`; empty = web is not called |
+| `REVALIDATE_TIMEOUT_SECONDS` | `5` | timeout of the call to `energy-web` |
 | `COGNITO_REGION` | `sa-east-1` | |
 | `COGNITO_USER_POOL_ID` | empty | required in `prod` |
 | `COGNITO_APP_CLIENT_IDS` | empty | accepted clients, comma separated (web and M2M); required in `prod` |
@@ -65,7 +65,7 @@ Read from the environment or from `.env` (see [`.env.example`](.env.example)).
 | `EVENT_RETENTION_DAYS` | `730` | default age for `POST /v1/admin/usage/purge` |
 | `AUTH_RATE_LIMIT_PER_MINUTE` | `10` | sign-up, login, reset and verification attempts, per IP and per e-mail |
 | `TRUST_X_FORWARDED_FOR` | `false` | `true` only behind the ALB (uses the rightmost entry) |
-| `WEB_API_SECRET` | empty | secret shared with the `energia-web` server: it trusts `X-Client-IP` and is required to send usage events; required in `prod` |
+| `WEB_API_SECRET` | empty | secret shared with the `energy-web` server: it trusts `X-Client-IP` and is required to send usage events; required in `prod` |
 
 ## Migrations
 
@@ -75,7 +75,7 @@ repository creates or alters tables.
 - New migration: change `app/models.py`, run
   `uv run alembic revision --autogenerate -m "description"` and review the generated file.
 - Apply: `uv run alembic upgrade head` (uses `DATABASE_URL`).
-- In the full local environment, the `migrate` service of the `energia-data`
+- In the full local environment, the `migrate` service of the `energy-data`
   `docker-compose.yml` builds this repository's image and runs `alembic upgrade head` against
   `warehouse-db` before Airflow starts.
 - In production, the migration is a one-off task with the same image (`alembic upgrade head`);
@@ -104,9 +104,9 @@ Public routes have no authentication. `/v1/admin/*` requires a Cognito JWT *acce
 (RS256, validated against the pool JWKS, pool `iss`, `token_use = access`, `client_id` in
 `COGNITO_APP_CLIENT_IDS`) that has:
 
-- **person (admin)**: the `admin` group in `cognito:groups`. `energia-web` handles the login
+- **person (admin)**: the `admin` group in `cognito:groups`. `energy-web` handles the login
   (OAuth with PKCE) and calls the API from the server with the user's token;
-- **machine (`energia-data`)**: the `energia-api/admin` scope, obtained through *client
+- **machine (`energy-data`)**: the `energia-api/admin` scope, obtained through *client
   credentials* on the M2M app client.
 
 Missing or invalid token: 401. Valid token without the group or the scope: 403.
@@ -130,13 +130,13 @@ policy, required; contact, optional). `score_lead` (`app/leads.py`) turns it int
 | `POST /v1/auth/me/delete` | deletes the account after confirming the password (LGPD) |
 
 Passwords use scrypt with a per-user salt; tokens are random and only their SHA-256 is stored.
-`energia-web` keeps the session token in an `httpOnly` cookie and gates the pages. The data routes
+`energy-web` keeps the session token in an `httpOnly` cookie and gates the pages. The data routes
 stay public, so the gate is about lead capture, not about protecting the data.
 
 ## Usage log
 
 Every page, filter, search, comparison and sign-in step is recorded in `usage_event`, so the free
-phase can be measured. `energia-web` sends the events (`POST /v1/events`, protected by
+phase can be measured. `energy-web` sends the events (`POST /v1/events`, protected by
 `WEB_API_SECRET`, resolves the member from the session token); the API writes the auth,
 newsletter and admin events itself.
 
@@ -178,11 +178,11 @@ changes.
 
 ## Revalidation (data → API → web)
 
-1. After each load, `energia-data` calls `POST /v1/admin/revalidate` with the machine token and
+1. After each load, `energy-data` calls `POST /v1/admin/revalidate` with the machine token and
    `{"tags": ["curtailment", "plants"]}`.
 2. The API clears its in-memory cache and calls `POST {WEB_URL}/api/revalidate` with the
    `x-revalidate-secret: {REVALIDATE_SECRET}` header and the same tags.
-3. `energia-web` calls `revalidateTag` for each tag.
+3. `energy-web` calls `revalidateTag` for each tag.
 
 The response says whether the web was reached (`web_revalidated`, `detail`); a web failure does
 not change the 200 status. Saving a report through `POST /v1/admin/reports` also clears the API
@@ -212,7 +212,7 @@ After approval it points `latest` at that SHA, runs the migration task
 with `--force-new-deployment`, waiting until it is stable. To roll back, re-run the deploy job of
 an older successful run.
 
-Required repository settings (values come from the `energia-infra` outputs):
+Required repository settings (values come from the `energy-infra` outputs):
 
 | Kind | Name |
 |---|---|
