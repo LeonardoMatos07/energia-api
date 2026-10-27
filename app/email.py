@@ -1,9 +1,12 @@
 import logging
 import smtplib
 import ssl
+import uuid
 from dataclasses import dataclass
 from email.message import EmailMessage as MimeMessage
 from typing import Any, Protocol
+
+import httpx
 
 from app.config import Settings
 
@@ -50,6 +53,41 @@ class SesEmailSender:
                 }
             },
         )
+
+
+class GatewayEmailSender:
+    """Hands the message to relay-api-gateway, which queues it in Relay for delivery.
+
+    Relay carries plain text only, so the HTML part is not sent. A failed call raises, and
+    `send_safely` logs it: the person can ask for another code.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        api_key: str,
+        timeout: float,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self._client = httpx.Client(
+            base_url=url.rstrip("/"),
+            headers={"x-api-key": api_key} if api_key else {},
+            timeout=timeout,
+            transport=transport,
+        )
+
+    def send(self, message: EmailMessage) -> None:
+        response = self._client.post(
+            "/v1/messages",
+            headers={"idempotency-key": f"energia-{uuid.uuid4()}"},
+            json={
+                "channel": "email",
+                "to": message.to,
+                "subject": message.subject,
+                "body": message.text,
+            },
+        )
+        response.raise_for_status()
 
 
 SMTP_SSL_PORT = 465
@@ -102,6 +140,10 @@ def make_email_sender(settings: Settings) -> EmailSender:
     backend = settings.EMAIL_BACKEND or ("ses" if settings.ENVIRONMENT == "prod" else "console")
     if backend == "ses":
         return SesEmailSender(settings.EMAIL_SENDER, settings.SES_REGION)
+    if backend == "gateway":
+        return GatewayEmailSender(
+            settings.GATEWAY_URL, settings.GATEWAY_API_KEY, settings.GATEWAY_TIMEOUT_SECONDS
+        )
     if backend == "smtp":
         return SmtpEmailSender(
             settings.SMTP_HOST,
