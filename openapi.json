@@ -1393,7 +1393,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MessageResponse"
+                  "$ref": "#/components/schemas/SignupResponse"
                 }
               }
             }
@@ -3894,11 +3894,16 @@
       },
       "PasswordReset": {
         "properties": {
-          "token": {
+          "email": {
             "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Token"
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "title": "Code"
           },
           "password": {
             "type": "string",
@@ -3909,7 +3914,8 @@
         },
         "type": "object",
         "required": [
-          "token",
+          "email",
+          "code",
           "password"
         ],
         "title": "PasswordReset"

@@ -56,7 +56,8 @@ Read from the environment or from `.env` (see [`.env.example`](.env.example)).
 | `COGNITO_APP_CLIENT_IDS` | empty | accepted clients, comma separated (web and M2M); required in `prod` |
 | `AUTH_DISABLED` | `false` | opens `/v1/admin/*` without a token; **only** with `ENVIRONMENT=local` |
 | `EMAIL_SENDER` | `Spillway <no-reply@localhost>` | sender of every e-mail (must be a verified sender in your provider) |
-| `EMAIL_BACKEND` | empty | `console` (logs the e-mail, local default), `smtp` or `ses`; empty = `ses` in `prod`, `console` otherwise |
+| `EMAIL_BACKEND` | empty | `console` (logs the e-mail, local default), `gateway`, `smtp` or `ses`; empty = `ses` in `prod`, `console` otherwise |
+| `GATEWAY_URL`, `GATEWAY_API_KEY`, `GATEWAY_TIMEOUT_SECONDS` | empty, empty, `10` | used when `EMAIL_BACKEND=gateway`: [relay-api-gateway](https://github.com/LeonardoMatos07/relay-api-gateway) queues the message in Relay, which delivers it (plain text only) |
 | `SES_REGION` | `sa-east-1` | |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` | empty, `587`, empty, empty, `true` | used when `EMAIL_BACKEND=smtp`; port 465 uses implicit TLS |
 | `CACHE_TTL_SECONDS` | `300` | in-memory cache of the public routes (0 disables it) |
@@ -126,7 +127,7 @@ policy, required; contact, optional). `score_lead` (`app/leads.py`) turns it int
 | `POST /v1/auth/resend-verification` | new code, replacing the previous one |
 | `POST /v1/auth/login` | returns a 14-day opaque session token (stored hashed); 403 until the e-mail is verified |
 | `GET /v1/auth/me`, `POST /v1/auth/logout` | `Authorization: Bearer <session token>` |
-| `POST /v1/auth/forgot-password`, `POST /v1/auth/reset-password` | 1-hour link; a reset revokes every session |
+| `POST /v1/auth/forgot-password`, `POST /v1/auth/reset-password` | `forgot-password` e-mails a 6-digit code (30 min, answers 202 either way); `reset-password` takes `{email, code, password}`, locks the code after 5 wrong tries and revokes every session |
 | `POST /v1/auth/me/delete` | deletes the account after confirming the password (LGPD) |
 
 Passwords use scrypt with a per-user salt; tokens are random and only their SHA-256 is stored.
@@ -158,6 +159,13 @@ sections, top states/plants/reports, searches, compared items, interactions, sig
 roles, active hot and warm leads), `GET /v1/admin/usage/events` (filters: `days`, `action`,
 `section`, `member_id`), `GET /v1/admin/usage/events.csv` (raw export), `GET
 /v1/admin/usage/members/{id}` (one person's timeline) and `POST /v1/admin/usage/purge`.
+
+### Sending e-mail through Relay
+
+`EMAIL_BACKEND=gateway` posts every message (verification code, password reset code, notice of an
+existing account) to `relay-api-gateway`, which hands it to Relay's queue. Relay delivers it with
+retries and provider failover (Amazon SES in the Relay repository's Terraform). Relay carries plain
+text, so the HTML part is not sent. In this mode `dev_code` is never returned.
 
 ### Sending e-mail before SES
 
