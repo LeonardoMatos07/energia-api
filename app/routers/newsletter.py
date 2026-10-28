@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionDep
-from app.dispatch import verify_unsubscribe_token
+from app.dispatch import DEFAULT_NAME, Recipient, unsubscribe_token, verify_unsubscribe_token
 from app.email import EmailMessage, EmailSender, send_safely, template_message
 from app.events import log_event
 from app.models import NewsletterSubscriber
@@ -23,6 +23,7 @@ from app.schemas import (
     UnsubscribedResponse,
 )
 from app.security import hash_token, new_token
+from app.welcome import send_all, welcome_messages
 
 router = APIRouter(prefix="/v1/newsletter", tags=["newsletter"])
 
@@ -155,7 +156,9 @@ def subscribe(
 @router.get(
     "/confirm", response_model=ConfirmedResponse, responses={400: {"description": INVALID_LINK}}
 )
-def confirm(request: Request, session: SessionDep, token: TokenQuery) -> ConfirmedResponse:
+def confirm(
+    request: Request, session: SessionDep, token: TokenQuery, background: BackgroundTasks
+) -> ConfirmedResponse:
     subscriber = session.scalars(
         select(NewsletterSubscriber).where(
             NewsletterSubscriber.confirmation_token_hash == hash_token(token)
@@ -172,6 +175,13 @@ def confirm(request: Request, session: SessionDep, token: TokenQuery) -> Confirm
     subscriber.confirmed_at = now
     log_event(session, request, category="newsletter", action="newsletter.confirm")
     session.commit()
+    settings: Settings = request.app.state.settings
+    link = (
+        f"{settings.web_url}/newsletter/descadastrar"
+        f"?token={unsubscribe_token(settings, subscriber.id)}"
+    )
+    messages = welcome_messages(session, settings, Recipient(subscriber.email, DEFAULT_NAME, link))
+    background.add_task(send_all, request.app.state.email_sender, messages)
     return ConfirmedResponse(confirmed=True)
 
 

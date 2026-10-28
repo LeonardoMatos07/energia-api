@@ -27,6 +27,7 @@ from app.email import EmailMessage, EmailSender, make_email_sender, template_mes
 from app.email_templates import month_label
 from app.exporting.data import load_analysis
 from app.exporting.email_content import analysis_blocks, report_blocks
+from app.exporting.kpis import month_kpis
 from app.models import EmailDispatch, Member, MonthlyReport, NewsletterSubscriber
 from app.schemas import parse_month
 
@@ -72,7 +73,7 @@ def _first_name(name: str) -> str:
 def recipients_for(session: Session, settings: Settings, kind: Kind) -> list[Recipient]:
     """Verified members who accepted marketing e-mail, plus (for the report) confirmed
     subscribers. Someone in both lists is mailed once, by their member name."""
-    manage_url = f"{settings.web_url}/conta"
+    manage_url = f"{settings.web_url}/newsletter/descadastrar"
     found: dict[str, Recipient] = {}
 
     members = session.scalars(
@@ -151,9 +152,8 @@ def content_blocks(
     if kind == "report":
         if report is None:
             raise DispatchError("a report dispatch needs its report")
-        return {
-            "content": report_blocks(report.content, f"{settings.web_url}/relatorios/{report.slug}")
-        }
+        url = f"{settings.web_url}/relatorios/{report.slug}"
+        return {"content": report_blocks(report.content, url, month_kpis(session, report.month))}
     period = f"{month:%Y-%m}"
     data = load_analysis(session, "SIN", "total", month, month)
     url = f"{settings.web_url}/analises?de={period}&ate={period}"

@@ -125,7 +125,7 @@ def test_each_message_is_personal_and_safe(
     assert "<em>recorde</em>" not in fan.html
     assert "&lt;em&gt;recorde&lt;/em&gt;" in fan.html
     assert "http://web.test/relatorios/corte-recorde" in fan.html
-    assert "/conta" in by_to["ana@example.org"].html
+    assert "/newsletter/descadastrar" in by_to["ana@example.org"].html
 
 
 @pytest.mark.usefixtures("audience", "report")
