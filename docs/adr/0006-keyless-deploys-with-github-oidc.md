@@ -1,7 +1,7 @@
 # 6. Keyless deploys with GitHub OIDC and gated production environments
 
 - **Status:** Accepted
-- **Scope:** energy-infra, energy-api, energy-data, energy-web
+- **Scope:** spillway-infra, spillway-api, spillway-data, spillway-web
 
 ## Context
 
@@ -13,8 +13,8 @@ every branch and pull request.
 
 - GitHub Actions authenticates to AWS through **OIDC**; there are no static AWS keys anywhere.
 - Each repository gets its own role, trusted only for specific subjects:
-  - `energy-api` and `energy-data`: pushes to `main` and the `production` environment;
-  - `energy-infra`: a **read-only plan role** for pull requests and `main`, and a separate
+  - `spillway-api` and `spillway-data`: pushes to `main` and the `production` environment;
+  - `spillway-infra`: a **read-only plan role** for pull requests and `main`, and a separate
     **apply role** assumable only from the `production` environment.
 - Every production deploy and every `terraform apply` runs in the GitHub `production`
   environment, which requires a reviewer's approval.

@@ -1,7 +1,7 @@
 # 5. No NAT gateway: public subnets with no inbound access, private database
 
 - **Status:** Accepted
-- **Scope:** energy-infra
+- **Scope:** spillway-infra
 
 ## Context
 

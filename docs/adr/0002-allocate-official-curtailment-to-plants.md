@@ -1,7 +1,7 @@
 # 2. Allocate the official ONS curtailment to plants instead of using plant estimates
 
 - **Status:** Accepted
-- **Scope:** energy-data (modelling), energy-api and energy-web (what is shown)
+- **Scope:** spillway-data (modelling), spillway-api and spillway-web (what is shown)
 
 ## Context
 
@@ -38,4 +38,4 @@ Sep/2026. A constant correction would still be wrong month to month.
   explicitly.
 - The edge cases found in the raw data (plants without a cluster, plants joining a cluster
   mid-month, missing days of CMO) each need an explicit rule; they are listed in the
-  `energy-data` README.
+  `spillway-data` README.
