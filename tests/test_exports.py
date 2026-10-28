@@ -1,5 +1,6 @@
 import csv
 import io
+import zipfile
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -60,64 +61,119 @@ def test_the_pdf_works_without_data_for_the_period(client: TestClient) -> None:
     assert r.content.startswith(b"%PDF-")
 
 
-def test_the_workbook_has_one_sheet_per_table(client: TestClient, hourly: None) -> None:
+ALL_SHEETS = [
+    "Resumo",
+    "Subsistemas por mês",
+    "Estados por mês",
+    "Empresas",
+    "Pontos de conexão",
+    "Perfil horário",
+    "Usinas por mês",
+]
+
+
+def test_the_workbook_holds_every_table_in_one_file(client: TestClient, hourly: None) -> None:
     r = client.get("/v1/exports/analysis.xlsx", params=PARAMS)
 
     assert r.status_code == 200
     assert "spreadsheetml" in r.headers["content-type"]
+    assert r.headers["content-disposition"].endswith('.xlsx"')
     book = load_workbook(io.BytesIO(r.content))
-    assert book.sheetnames == [
-        "Resumo",
-        "Subsistemas por mês",
-        "Empresas",
-        "Pontos de conexão",
-        "Perfil horário",
-    ]
+    assert book.sheetnames == ALL_SHEETS
     subsystems = list(book["Subsistemas por mês"].iter_rows(values_only=True))
     assert subsystems[0][:3] == ("Mês", "Subsistema", "Geração verificada (MWh)")
     assert {row[1] for row in subsystems[1:]} == {"NE", "SIN"}
     assert len(subsystems) == 1 + 6
     assert len(list(book["Perfil horário"].iter_rows())) == 1 + 48
+    plants = list(book["Usinas por mês"].iter_rows(values_only=True))
+    assert plants[0][:4] == ("Mês", "Usina", "Fonte", "UF")
+    assert {row[1] for row in plants[1:]} >= {"Alpha I", "Bahia Sun", "Potiguar Winds"}
+    assert "Alpha Cluster" not in {row[1] for row in plants[1:]}
+    states = list(book["Estados por mês"].iter_rows(values_only=True))
+    assert {row[1] for row in states[1:]} == {"BA"}
 
 
-def test_csv_downloads_one_table(client: TestClient) -> None:
-    r = client.get("/v1/exports/subsystems.csv", params=PARAMS)
+def test_the_csv_download_is_one_zip_with_every_table(client: TestClient, hourly: None) -> None:
+    r = client.get("/v1/exports/analysis-csv.zip", params=PARAMS)
 
     assert r.status_code == 200
-    assert r.headers["content-type"] == "text/csv; charset=utf-8"
-    assert "subsystems.csv" in r.headers["content-disposition"]
-    table = rows(r.content)
-    assert table[0][:3] == ["Mês", "Subsistema", "Geração verificada (MWh)"]
-    assert [row[0] for row in table[1:]] == ["2026-07"] * 2 + ["2026-08"] * 2 + ["2026-09"] * 2
-    assert {row[1] for row in table[1:]} == {"NE", "SIN"}
+    assert r.headers["content-type"] == "application/zip"
+    assert r.headers["content-disposition"].endswith('-csv.zip"')
+    with zipfile.ZipFile(io.BytesIO(r.content)) as archive:
+        assert archive.namelist() == [
+            "01-summary.csv",
+            "02-subsystems.csv",
+            "03-states.csv",
+            "04-operators.csv",
+            "05-connection-points.csv",
+            "06-hourly.csv",
+            "07-plants.csv",
+        ]
+        summary = rows(archive.read("01-summary.csv"))
+        subsystems = rows(archive.read("02-subsystems.csv"))
+    assert ["Escopo", "SIN"] in summary
+    assert ["Fonte", "Eólica e solar"] in summary
+    assert ["Período", "07/2026 a 09/2026"] in summary
+    assert [row[0] for row in subsystems[1:]] == ["2026-07"] * 2 + ["2026-08"] * 2 + ["2026-09"] * 2
 
 
-@pytest.mark.parametrize("dataset", ["summary", "operators", "connection-points", "hourly"])
-def test_every_dataset_is_available_as_csv(client: TestClient, dataset: str) -> None:
-    r = client.get(f"/v1/exports/{dataset}.csv", params=PARAMS)
-    assert r.status_code == 200
-    assert len(rows(r.content)) >= 1
+def test_a_subsystem_filter_narrows_every_table(client: TestClient) -> None:
+    r = client.get("/v1/exports/analysis-csv.zip", params={**PARAMS, "scope": "NE"})
+    with zipfile.ZipFile(io.BytesIO(r.content)) as archive:
+        subsystems = rows(archive.read("02-subsystems.csv"))
+        plants = rows(archive.read("07-plants.csv"))
+    assert {row[1] for row in subsystems[1:]} == {"NE"}
+    assert {row[4] for row in plants[1:]} == {"NE"}
 
 
-def test_the_summary_csv_reads_like_the_screen(client: TestClient) -> None:
-    table = rows(client.get("/v1/exports/summary.csv", params=PARAMS).content)
-    assert table[0] == ["Indicador", "Valor"]
-    assert ["Escopo", "SIN"] in table
-    assert ["Fonte", "Eólica e solar"] in table
-    assert ["Período", "07/2026 a 09/2026"] in table
+def test_the_rankings_are_not_cut_short(session: Session, client: TestClient) -> None:
+    from app.models import PlantMonthlyCurtailment
+
+    session.add_all(
+        Plant(
+            id=f"X{i}",
+            kind="plant",
+            name=f"Extra {i}",
+            slug=f"extra-{i}",
+            source="wind",
+            state="BA",
+            subsystem="NE",
+            operator=f"Operator {i}",
+            connection_point=f"Point {i}",
+        )
+        for i in range(250)
+    )
+    session.flush()
+    session.add_all(
+        PlantMonthlyCurtailment(
+            plant_id=f"X{i}",
+            month=SEP,
+            verified_generation_mwh=Decimal("10"),
+            curtailed_mwh=Decimal("1"),
+            curtailed_rel_mwh=Decimal("0"),
+            curtailed_cnf_mwh=Decimal("0"),
+            curtailed_ene_mwh=Decimal("1"),
+            curtailed_other_mwh=Decimal("0"),
+            restricted_hours=Decimal("1"),
+        )
+        for i in range(250)
+    )
+    session.commit()
+
+    r = client.get("/v1/exports/analysis-csv.zip", params=PARAMS)
+    with zipfile.ZipFile(io.BytesIO(r.content)) as archive:
+        operators = rows(archive.read("04-operators.csv"))
+    assert len(operators) - 1 >= 250
 
 
-def test_a_subsystem_filter_narrows_the_series(client: TestClient) -> None:
-    table = rows(client.get("/v1/exports/subsystems.csv", params={**PARAMS, "scope": "NE"}).content)
-    assert {row[1] for row in table[1:]} == {"NE"}
-
-
-def test_an_unknown_dataset_or_bad_parameter_is_refused(client: TestClient) -> None:
-    assert client.get("/v1/exports/secrets.csv").status_code == 422
+def test_an_unknown_file_or_bad_parameter_is_refused(client: TestClient) -> None:
+    assert client.get("/v1/exports/secrets.csv").status_code in (404, 422)
+    assert client.get("/v1/exports/summary.csv").status_code in (404, 422)
     assert client.get("/v1/exports/analysis.pdf", params={"scope": "XX"}).status_code == 422
     assert client.get("/v1/exports/analysis.pdf", params={"start": "2026-13"}).status_code == 422
     backwards = {"start": "2026-09", "end": "2026-07"}
     assert client.get("/v1/exports/analysis.xlsx", params=backwards).status_code == 422
+    assert client.get("/v1/exports/analysis-csv.zip", params=backwards).status_code == 422
 
 
 def test_downloads_are_rate_limited(app_factory: object) -> None:
@@ -125,7 +181,7 @@ def test_downloads_are_rate_limited(app_factory: object) -> None:
 
     make: Callable[..., TestClient] = app_factory  # type: ignore[assignment]
     limited = make(EXPORT_RATE_LIMIT_PER_MINUTE=2)
-    codes = [limited.get("/v1/exports/summary.csv").status_code for _ in range(3)]
+    codes = [limited.get("/v1/exports/analysis-csv.zip").status_code for _ in range(3)]
     assert codes == [200, 200, 429]
 
 
