@@ -1,21 +1,70 @@
 import logging
 import smtplib
 import ssl
+import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from email.message import EmailMessage as MimeMessage
 from typing import Any, Protocol
 
+import httpx
+
 from app.config import Settings
+from app.email_templates import Variables, build, render
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class EmailMessage:
+    """With `variables`, subject, text and html are templates holding `{{name}}` placeholders.
+
+    The gateway backend sends them as they are and Relay fills them in; every other backend uses
+    `rendered()`. `metadata` tells Relay which product and template the message belongs to.
+    """
+
     to: str
     subject: str
     text: str
     html: str
+    variables: Variables | None = None
+    idempotency_key: str | None = None
+    metadata: Mapping[str, str] | None = None
+
+    def rendered(self) -> "EmailMessage":
+        if self.variables is None:
+            return self
+        return EmailMessage(
+            to=self.to,
+            subject=render(self.subject, self.variables, html=False),
+            text=render(self.text, self.variables, html=False),
+            html=render(self.html, self.variables, html=True),
+            metadata=self.metadata,
+        )
+
+
+def template_message(
+    settings: Settings,
+    name: str,
+    to: str,
+    variables: Variables,
+    *,
+    fixed: Mapping[str, str | int] | None = None,
+    blocks: Mapping[str, tuple[str, str]] | None = None,
+    idempotency_key: str | None = None,
+) -> EmailMessage:
+    """An e-mail from one of Spillway's templates: `fixed` fills the `[[...]]` placeholders now,
+    `variables` the `{{...}}` ones (here or in Relay)."""
+    template = build(name, settings.web_url, blocks, **(fixed or {}))
+    return EmailMessage(
+        to=to,
+        subject=template.subject,
+        text=template.text,
+        html=template.html,
+        variables=variables,
+        idempotency_key=idempotency_key,
+        metadata={"template": name},
+    )
 
 
 class EmailSender(Protocol):
@@ -37,6 +86,7 @@ class SesEmailSender:
         self._sender = sender
 
     def send(self, message: EmailMessage) -> None:
+        message = message.rendered()
         self._client.send_email(
             FromEmailAddress=self._sender,
             Destination={"ToAddresses": [message.to]},
@@ -50,6 +100,47 @@ class SesEmailSender:
                 }
             },
         )
+
+
+class GatewayEmailSender:
+    """Hands the message to relay-api-gateway, which queues it in Relay for delivery.
+
+    The templates and their variables go as they are: Relay fills in the values and sends both
+    the HTML and the text. A failed call raises, and `send_safely` logs it: the person can ask
+    for another code.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        api_key: str,
+        timeout: float,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self._client = httpx.Client(
+            base_url=url.rstrip("/"),
+            headers={"x-api-key": api_key} if api_key else {},
+            timeout=timeout,
+            transport=transport,
+        )
+
+    def send(self, message: EmailMessage) -> None:
+        payload: dict[str, Any] = {
+            "channel": "email",
+            "to": message.to,
+            "subject": message.subject,
+            "body": message.text,
+            "html": message.html,
+            "metadata": {"product": "energia", **(message.metadata or {})},
+        }
+        if message.variables is not None:
+            payload["variables"] = dict(message.variables)
+        response = self._client.post(
+            "/v1/messages",
+            headers={"idempotency-key": message.idempotency_key or f"energia-{uuid.uuid4()}"},
+            json=payload,
+        )
+        response.raise_for_status()
 
 
 SMTP_SSL_PORT = 465
@@ -74,6 +165,7 @@ class SmtpEmailSender:
         self._starttls = starttls
 
     def send(self, message: EmailMessage) -> None:
+        message = message.rendered()
         mime = MimeMessage()
         mime["From"] = self._sender
         mime["To"] = message.to
@@ -102,6 +194,10 @@ def make_email_sender(settings: Settings) -> EmailSender:
     backend = settings.EMAIL_BACKEND or ("ses" if settings.ENVIRONMENT == "prod" else "console")
     if backend == "ses":
         return SesEmailSender(settings.EMAIL_SENDER, settings.SES_REGION)
+    if backend == "gateway":
+        return GatewayEmailSender(
+            settings.GATEWAY_URL, settings.GATEWAY_API_KEY, settings.GATEWAY_TIMEOUT_SECONDS
+        )
     if backend == "smtp":
         return SmtpEmailSender(
             settings.SMTP_HOST,

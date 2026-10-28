@@ -20,6 +20,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
     extract,
     func,
@@ -171,6 +172,29 @@ class MonthlyReport(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now_default()
     updated_at: Mapped[datetime] = _now_default()
+
+
+class EmailDispatch(Base):
+    """One monthly send of a kind of e-mail ("report", "analysis"). At most one per kind and
+    month, so pressing the button twice does not mail everyone twice."""
+
+    __tablename__ = "email_dispatch"
+    __table_args__ = (
+        UniqueConstraint("kind", "month"),
+        CheckConstraint("kind IN ('report', 'analysis')", name="kind"),
+        CheckConstraint("status IN ('running', 'done', 'partial')", name="status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    month: Mapped[date] = mapped_column(Date, nullable=False)
+    report_id: Mapped[int | None] = mapped_column(BigIntId, ForeignKey("monthly_report.id"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="running")
+    recipients: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime] = _now_default()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class NewsletterSubscriber(Base):

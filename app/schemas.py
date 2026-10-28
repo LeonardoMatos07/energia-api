@@ -231,6 +231,30 @@ class ReportListResponse(BaseModel):
     items: list[ReportSummary]
 
 
+class DispatchInput(BaseModel):
+    kind: Literal["report", "analysis"]
+    month: Month | None = Field(
+        default=None, description="Defaults to the month of the latest published report."
+    )
+    retry: bool = Field(default=False, description="Finish a send that stopped partway.")
+
+
+class Dispatch(_Orm):
+    id: int
+    kind: Literal["report", "analysis"]
+    month: Month
+    status: Literal["running", "done", "partial"]
+    recipients: int
+    sent: int
+    failed: int
+    started_at: datetime
+    finished_at: datetime | None
+
+
+class DispatchListResponse(BaseModel):
+    items: list[Dispatch]
+
+
 class AdminReportListResponse(BaseModel):
     items: list[AdminReport]
 
@@ -398,12 +422,9 @@ class EmailOnly(BaseModel):
     email: EmailStr = Field(max_length=254)
 
 
-class TokenOnly(BaseModel):
-    token: str = Field(min_length=1, max_length=200)
-
-
 class PasswordReset(BaseModel):
-    token: str = Field(min_length=1, max_length=200)
+    email: EmailStr = Field(max_length=254)
+    code: str = Field(pattern=r"^[0-9]{6}$")
     password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
 

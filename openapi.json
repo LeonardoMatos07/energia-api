@@ -960,6 +960,371 @@
         }
       }
     },
+    "/v1/reports/{slug}/pdf": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "A published report as a PDF",
+        "operationId": "get_report_pdf_v1_reports__slug__pdf_get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exports/analysis.pdf": {
+      "get": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "The analyses as a PDF report",
+        "operationId": "analysis_pdf_file_v1_exports_analysis_pdf_get",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "N",
+                "NE",
+                "S",
+                "SE",
+                "SIN"
+              ],
+              "type": "string",
+              "default": "SIN",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exports/analysis.xlsx": {
+      "get": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "Every analysis table in one Excel workbook",
+        "operationId": "analysis_xlsx_file_v1_exports_analysis_xlsx_get",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "N",
+                "NE",
+                "S",
+                "SE",
+                "SIN"
+              ],
+              "type": "string",
+              "default": "SIN",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exports/{dataset}.csv": {
+      "get": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "One analysis table as CSV",
+        "operationId": "analysis_csv_file_v1_exports__dataset__csv_get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "summary",
+                "subsystems",
+                "operators",
+                "connection-points",
+                "hourly"
+              ],
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "N",
+                "NE",
+                "S",
+                "SE",
+                "SIN"
+              ],
+              "type": "string",
+              "default": "SIN",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/newsletter": {
       "post": {
         "tags": [
@@ -1393,7 +1758,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MessageResponse"
+                  "$ref": "#/components/schemas/SignupResponse"
                 }
               }
             }
@@ -1671,6 +2036,77 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/admin/dispatches": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Dispatches",
+        "operationId": "list_dispatches_v1_admin_dispatches_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Start Dispatch",
+        "description": "Sends the monthly report (to subscribers and opted-in members) or the analyses e-mail (to\nopted-in members). The recipients are mailed in the background; poll the list for progress.",
+        "operationId": "start_dispatch_v1_admin_dispatches_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispatch"
                 }
               }
             }
@@ -2553,6 +2989,136 @@
           "members"
         ],
         "title": "DailyUsage"
+      },
+      "Dispatch": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "report",
+              "analysis"
+            ],
+            "title": "Kind"
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-09"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "done",
+              "partial"
+            ],
+            "title": "Status"
+          },
+          "recipients": {
+            "type": "integer",
+            "title": "Recipients"
+          },
+          "sent": {
+            "type": "integer",
+            "title": "Sent"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "month",
+          "status",
+          "recipients",
+          "sent",
+          "failed",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "Dispatch"
+      },
+      "DispatchInput": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "report",
+              "analysis"
+            ],
+            "title": "Kind"
+          },
+          "month": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Month",
+            "description": "Defaults to the month of the latest published report."
+          },
+          "retry": {
+            "type": "boolean",
+            "title": "Retry",
+            "description": "Finish a send that stopped partway.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "DispatchInput"
+      },
+      "DispatchListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Dispatch"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DispatchListResponse"
       },
       "EmailOnly": {
         "properties": {
@@ -3894,11 +4460,16 @@
       },
       "PasswordReset": {
         "properties": {
-          "token": {
+          "email": {
             "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Token"
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "title": "Code"
           },
           "password": {
             "type": "string",
@@ -3909,7 +4480,8 @@
         },
         "type": "object",
         "required": [
-          "token",
+          "email",
+          "code",
           "password"
         ],
         "title": "PasswordReset"

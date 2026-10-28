@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
@@ -14,11 +14,15 @@ from app.auth import AdminDep
 from app.cache import TTLCache
 from app.config import Settings
 from app.db import SessionDep
+from app.dispatch import DispatchError, latest_report, open_dispatch, run_dispatch
 from app.events import log_event
-from app.models import LoadRun, Member, MonthlyReport, UsageEvent
+from app.models import EmailDispatch, LoadRun, Member, MonthlyReport, UsageEvent
 from app.schemas import (
     AdminReport,
     AdminReportListResponse,
+    Dispatch,
+    DispatchInput,
+    DispatchListResponse,
     Lead,
     LeadListResponse,
     LeadTier,
@@ -124,6 +128,58 @@ def notify_web(
         logger.warning("failed to revalidate energy-web (%s): %s", url, exc)
         return False, f"failed to call energy-web: {type(exc).__name__}"
     return True, None
+
+
+@router.get("/dispatches", response_model=DispatchListResponse)
+def list_dispatches(_admin: AdminDep, session: SessionDep) -> DispatchListResponse:
+    rows = session.scalars(
+        select(EmailDispatch).order_by(EmailDispatch.month.desc(), EmailDispatch.id.desc())
+    ).all()
+    return DispatchListResponse(items=[Dispatch.model_validate(r) for r in rows])
+
+
+@router.post("/dispatches", status_code=202, response_model=Dispatch)
+def start_dispatch(
+    body: DispatchInput,
+    admin: AdminDep,
+    session: SessionDep,
+    request: Request,
+    background: BackgroundTasks,
+) -> Dispatch:
+    """Sends the monthly report (to subscribers and opted-in members) or the analyses e-mail (to
+    opted-in members). The recipients are mailed in the background; poll the list for progress."""
+    month = body.month
+    if month is None:
+        latest = latest_report(session)
+        if latest is None:
+            raise HTTPException(status_code=422, detail="There is no published report to send.")
+        month = latest.month
+    try:
+        row = open_dispatch(session, body.kind, month, retry=body.retry)
+    except DispatchError as error:
+        status = 409 if "already sent" in str(error) else 422
+        raise HTTPException(status_code=status, detail=str(error)) from error
+    log_event(
+        session,
+        request,
+        category="admin",
+        action="admin.dispatch_started",
+        properties={
+            "kind": body.kind,
+            "month": month.isoformat(),
+            "actor": admin.subject,
+            "actor_kind": admin.kind,
+        },
+    )
+    session.commit()
+    background.add_task(
+        run_dispatch,
+        request.app.state.sessionmaker,
+        request.app.state.email_sender,
+        request.app.state.settings,
+        row.id,
+    )
+    return Dispatch.model_validate(row)
 
 
 @router.post("/revalidate", response_model=RevalidateResponse)

@@ -82,7 +82,7 @@ class FakeEmailSender:
         self.sent: list[EmailMessage] = []
 
     def send(self, message: EmailMessage) -> None:
-        self.sent.append(message)
+        self.sent.append(message.rendered())
 
 
 @pytest.fixture

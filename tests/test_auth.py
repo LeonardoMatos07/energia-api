@@ -12,6 +12,8 @@ from app.security import hash_password, verify_password
 from tests.conftest import FakeEmailSender
 
 PASSWORD = "correct horse battery"
+EMAIL = "ana@empresa.com.br"
+NEW_PASSWORD = "a different password"
 
 
 def payload(**overrides: Any) -> dict[str, Any]:
@@ -44,6 +46,18 @@ def code_from(emails: FakeEmailSender, index: int = -1) -> str:
     match = re.search(r"código de verificação é: (\d{6})", emails.sent[index].text)
     assert match, emails.sent[index].text
     return match.group(1)
+
+
+def reset_code_from(emails: FakeEmailSender, index: int = -1) -> str:
+    match = re.search(r"código para criar uma nova senha é: (\d{6})", emails.sent[index].text)
+    assert match, emails.sent[index].text
+    return match.group(1)
+
+
+def reset(client: TestClient, code: str, password: str = NEW_PASSWORD, email: str = EMAIL) -> Any:
+    return client.post(
+        "/v1/auth/reset-password", json={"email": email, "code": code, "password": password}
+    )
 
 
 def verify(client: TestClient, emails: FakeEmailSender, email: str = "ana@empresa.com.br") -> Any:
@@ -290,27 +304,78 @@ def test_password_reset_flow(client: TestClient, emails: FakeEmailSender) -> Non
     signup_and_verify(client, emails)
     old_session = login(client).json()["session_token"]
 
-    assert (
-        client.post("/v1/auth/forgot-password", json={"email": "ana@empresa.com.br"}).status_code
-        == 202
-    )
-    assert "redefinir-senha?token=" in emails.sent[-1].text
-    token = token_from(emails)
+    forgot = client.post("/v1/auth/forgot-password", json={"email": EMAIL})
+    assert forgot.status_code == 202
+    code = reset_code_from(emails)
+    assert code in emails.sent[-1].subject
+    assert "token=" not in emails.sent[-1].text
+    assert forgot.json()["dev_code"] == code
 
-    reset = client.post(
-        "/v1/auth/reset-password", json={"token": token, "password": "a different password"}
-    )
-    assert reset.status_code == 200
+    assert reset(client, code).status_code == 200
     assert (
         client.get("/v1/auth/me", headers={"Authorization": f"Bearer {old_session}"}).status_code
         == 401
     )
     assert login(client).status_code == 401
     assert login(client, password="a different password").status_code == 200
-    again = client.post(
-        "/v1/auth/reset-password", json={"token": token, "password": "yet another password"}
-    )
-    assert again.status_code == 400
+    assert reset(client, code, "yet another password").status_code == 400
+
+
+def test_a_wrong_reset_code_locks_after_five_attempts(
+    client: TestClient, emails: FakeEmailSender
+) -> None:
+    signup_and_verify(client, emails)
+    client.post("/v1/auth/forgot-password", json={"email": EMAIL})
+    real = reset_code_from(emails)
+    wrong = "000000" if real != "000000" else "111111"
+    for _ in range(5):
+        assert reset(client, wrong).status_code == 400
+    assert reset(client, real).status_code == 400
+    assert login(client).status_code == 200
+
+    client.post("/v1/auth/forgot-password", json={"email": EMAIL})
+    assert reset(client, reset_code_from(emails)).status_code == 200
+
+
+def test_an_expired_reset_code_is_refused(
+    client: TestClient, emails: FakeEmailSender, session: Session
+) -> None:
+    signup_and_verify(client, emails)
+    client.post("/v1/auth/forgot-password", json={"email": EMAIL})
+    token = session.scalars(select(MemberToken).where(MemberToken.kind == "reset")).one()
+    token.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    session.commit()
+    assert reset(client, reset_code_from(emails)).status_code == 400
+
+
+def test_a_verification_code_cannot_reset_a_password(
+    client: TestClient, emails: FakeEmailSender
+) -> None:
+    client.post("/v1/auth/signup", json=payload())
+    verification = code_from(emails)
+    assert reset(client, verification).status_code == 400
+    assert login(client).status_code == 403
+
+
+def test_reset_does_not_reveal_which_accounts_exist(client: TestClient) -> None:
+    response = reset(client, "123456", email="ghost@example.com")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid or expired code."}
+
+
+@pytest.mark.parametrize("code", ["12345", "1234567", "abcdef"])
+def test_the_reset_code_must_have_six_digits(client: TestClient, code: str) -> None:
+    assert reset(client, code).status_code == 422
+
+
+def test_the_reset_code_is_only_returned_for_local_console_mail(
+    app_factory: Any, emails: FakeEmailSender
+) -> None:
+    gateway = app_factory(EMAIL_BACKEND="gateway", GATEWAY_URL="http://gateway.test")
+    gateway.app.state.email_sender = emails
+    signup_and_verify(gateway, emails)
+    response = gateway.post("/v1/auth/forgot-password", json={"email": EMAIL})
+    assert response.json()["dev_code"] is None
 
 
 def test_forgot_password_stays_silent_for_unknown_or_unverified_accounts(

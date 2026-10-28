@@ -2,7 +2,6 @@ import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from sqlalchemy import delete, select, update
@@ -11,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionDep
-from app.email import EmailMessage, EmailSender, send_safely
+from app.email import EmailMessage, EmailSender, send_safely, template_message
 from app.events import log_event
 from app.leads import score_lead
 from app.models import Member, MemberSession, MemberToken, UsageEvent
@@ -37,10 +36,9 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 VERIFY_CODE_TTL = timedelta(minutes=30)
 MAX_CODE_ATTEMPTS = 5
 CODE_DIGITS = 6
-RESET_TTL = timedelta(hours=1)
+RESET_CODE_TTL = timedelta(minutes=30)
 SESSION_TTL = timedelta(days=14)
 ACCEPTED_MESSAGE = "If the address is valid, an e-mail is on its way."
-INVALID_LINK = "Invalid or expired token."
 INVALID_CODE = "Invalid or expired code."
 INVALID_CREDENTIALS = "Invalid e-mail or password."
 UNVERIFIED = "Email not verified."
@@ -111,37 +109,21 @@ def _delete_member(session: Session, member: Member) -> None:
     session.delete(member)
 
 
-def _issue_token(session: Session, member: Member, kind: str, ttl: timedelta) -> str:
+def _code_hash(member: Member, kind: str, code: str) -> str:
+    return hash_token(f"{member.id}:{kind}:{code}")
+
+
+def _issue_code(session: Session, member: Member, kind: str, ttl: timedelta) -> str:
     session.execute(
         delete(MemberToken).where(MemberToken.member_id == member.id, MemberToken.kind == kind)
-    )
-    token, token_hash = new_token()
-    session.add(
-        MemberToken(
-            member_id=member.id,
-            kind=kind,
-            token_hash=token_hash,
-            expires_at=datetime.now(UTC) + ttl,
-        )
-    )
-    return token
-
-
-def _code_hash(member: Member, code: str) -> str:
-    return hash_token(f"{member.id}:{code}")
-
-
-def _issue_code(session: Session, member: Member) -> str:
-    session.execute(
-        delete(MemberToken).where(MemberToken.member_id == member.id, MemberToken.kind == "verify")
     )
     code = f"{secrets.randbelow(10**CODE_DIGITS):0{CODE_DIGITS}d}"
     session.add(
         MemberToken(
             member_id=member.id,
-            kind="verify",
-            token_hash=_code_hash(member, code),
-            expires_at=datetime.now(UTC) + VERIFY_CODE_TTL,
+            kind=kind,
+            token_hash=_code_hash(member, kind, code),
+            expires_at=datetime.now(UTC) + ttl,
         )
     )
     return code
@@ -152,69 +134,67 @@ def _dev_code(settings: Settings, code: str) -> str | None:
     return code if local_console else None
 
 
-def _find_token(session: Session, raw: str, kind: str) -> tuple[MemberToken, Member] | None:
-    row = session.execute(
-        select(MemberToken, Member)
-        .join(Member, Member.id == MemberToken.member_id)
-        .where(MemberToken.token_hash == hash_token(raw), MemberToken.kind == kind)
+def _consume_code(
+    session: Session, request: Request, member: Member, kind: str, code: str, failed_action: str
+) -> MemberToken:
+    """Checks a 6-digit code; counts a wrong guess and locks the code after MAX_CODE_ATTEMPTS."""
+    token = session.scalars(
+        select(MemberToken)
+        .where(
+            MemberToken.member_id == member.id,
+            MemberToken.kind == kind,
+            MemberToken.used_at.is_(None),
+        )
+        .order_by(MemberToken.id.desc())
     ).first()
-    return None if row is None else (row[0], row[1])
+    now = datetime.now(UTC)
+    if token is None or _aware(token.expires_at) <= now or token.attempts >= MAX_CODE_ATTEMPTS:
+        raise HTTPException(status_code=400, detail=INVALID_CODE)
+    if not hmac.compare_digest(token.token_hash, _code_hash(member, kind, code)):
+        token.attempts += 1
+        log_event(
+            session,
+            request,
+            category="auth",
+            action=failed_action,
+            member=member,
+            properties={"attempts": token.attempts},
+        )
+        session.commit()
+        raise HTTPException(status_code=400, detail=INVALID_CODE)
+    token.used_at = now
+    return token
 
 
-def verification_email(settings: Settings, to: str, code: str) -> EmailMessage:
+def verification_email(settings: Settings, to: str, name: str, code: str) -> EmailMessage:
     minutes = int(VERIFY_CODE_TTL.total_seconds() // 60)
-    text = (
-        "Olá!\n\n"
-        "Recebemos um cadastro no Spillway com este e-mail.\n"
-        f"Seu código de verificação é: {code}\n\n"
-        f"Digite esse código na tela de cadastro. Ele vale por {minutes} minutos.\n"
-        "Se não foi você, ignore este e-mail: nada será ativado.\n"
+    return template_message(
+        settings,
+        "verification-code",
+        to,
+        {"name": first_name(name), "code": code},
+        fixed={"minutes": minutes},
     )
-    html = (
-        "<p>Olá!</p>"
-        "<p>Recebemos um cadastro no Spillway com este e-mail.</p>"
-        "<p>Seu código de verificação é:</p>"
-        f'<p style="font-size:28px;font-weight:700;letter-spacing:6px">{code}</p>'
-        f"<p>Digite esse código na tela de cadastro. Ele vale por {minutes} minutos.</p>"
-        "<p>Se não foi você, ignore este e-mail: nada será ativado.</p>"
-    )
-    return EmailMessage(to=to, subject=f"Seu código do Spillway: {code}", text=text, html=html)
 
 
-def existing_account_email(settings: Settings, to: str) -> EmailMessage:
-    login_url = f"{settings.web_url}/entrar"
-    reset_url = f"{settings.web_url}/esqueci-a-senha"
-    text = (
-        "Olá!\n\n"
-        "Alguém tentou criar um cadastro no Spillway com este e-mail, que já tem conta.\n"
-        f"Para entrar: {login_url}\n"
-        f"Se esqueceu a senha: {reset_url}\n\n"
-        "Se não foi você, ignore este e-mail.\n"
-    )
-    html = (
-        "<p>Olá!</p>"
-        "<p>Alguém tentou criar um cadastro no Spillway com este e-mail, que já tem conta.</p>"
-        f'<p><a href="{login_url}">Entrar</a> · <a href="{reset_url}">Esqueci a senha</a></p>'
-        "<p>Se não foi você, ignore este e-mail.</p>"
-    )
-    return EmailMessage(to=to, subject="Você já tem conta no Spillway", text=text, html=html)
+def existing_account_email(settings: Settings, to: str, name: str) -> EmailMessage:
+    return template_message(settings, "existing-account", to, {"name": first_name(name)})
 
 
-def reset_email(settings: Settings, to: str, token: str) -> EmailMessage:
-    url = f"{settings.web_url}/redefinir-senha?token={quote(token)}"
-    text = (
-        "Olá!\n\n"
-        "Recebemos um pedido para redefinir a senha do Spillway.\n"
-        f"Para escolher uma nova senha, acesse (válido por 1 hora):\n{url}\n\n"
-        "Se não foi você, ignore este e-mail: sua senha continua a mesma.\n"
+def reset_email(settings: Settings, to: str, name: str, code: str) -> EmailMessage:
+    minutes = int(RESET_CODE_TTL.total_seconds() // 60)
+    return template_message(
+        settings,
+        "reset-code",
+        to,
+        {"name": first_name(name), "code": code},
+        fixed={"minutes": minutes},
     )
-    html = (
-        "<p>Olá!</p>"
-        "<p>Recebemos um pedido para redefinir a senha do Spillway.</p>"
-        f'<p><a href="{url}">Escolher nova senha</a> (válido por 1 hora).</p>'
-        "<p>Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>"
-    )
-    return EmailMessage(to=to, subject="Redefinir a senha do Spillway", text=text, html=html)
+
+
+def first_name(name: str) -> str:
+    parts = name.split()
+    return parts[0] if parts else "assinante"
 
 
 @router.post(
@@ -237,7 +217,9 @@ def signup(
     if existing is not None and existing.email_verified_at is not None:
         log_event(session, request, category="auth", action="auth.signup_existing")
         session.commit()
-        background.add_task(send_safely, sender, existing_account_email(settings, email))
+        background.add_task(
+            send_safely, sender, existing_account_email(settings, email, existing.name)
+        )
         return SignupResponse(message=ACCEPTED_MESSAGE)
     if existing is not None:
         _delete_member(session, existing)
@@ -278,7 +260,7 @@ def signup(
     )
     session.add(member)
     session.flush()
-    code = _issue_code(session, member)
+    code = _issue_code(session, member, "verify", VERIFY_CODE_TTL)
     log_event(
         session,
         request,
@@ -301,7 +283,7 @@ def signup(
     except IntegrityError:
         session.rollback()
         return SignupResponse(message=ACCEPTED_MESSAGE)
-    background.add_task(send_safely, sender, verification_email(settings, email, code))
+    background.add_task(send_safely, sender, verification_email(settings, email, body.name, code))
     return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
 
 
@@ -314,32 +296,8 @@ def verify_email(
     member = session.scalars(select(Member).where(Member.email == email)).first()
     if member is None or member.email_verified_at is not None:
         raise HTTPException(status_code=400, detail=INVALID_CODE)
-    token = session.scalars(
-        select(MemberToken)
-        .where(
-            MemberToken.member_id == member.id,
-            MemberToken.kind == "verify",
-            MemberToken.used_at.is_(None),
-        )
-        .order_by(MemberToken.id.desc())
-    ).first()
-    now = datetime.now(UTC)
-    if token is None or _aware(token.expires_at) <= now or token.attempts >= MAX_CODE_ATTEMPTS:
-        raise HTTPException(status_code=400, detail=INVALID_CODE)
-    if not hmac.compare_digest(token.token_hash, _code_hash(member, body.code)):
-        token.attempts += 1
-        log_event(
-            session,
-            request,
-            category="auth",
-            action="auth.verify_failed",
-            member=member,
-            properties={"attempts": token.attempts},
-        )
-        session.commit()
-        raise HTTPException(status_code=400, detail=INVALID_CODE)
-    token.used_at = now
-    member.email_verified_at = now
+    _consume_code(session, request, member, "verify", body.code, "auth.verify_failed")
+    member.email_verified_at = datetime.now(UTC)
     log_event(session, request, category="auth", action="auth.verify", member=member)
     session.commit()
     return VerifiedResponse(verified=True)
@@ -355,12 +313,14 @@ def resend_verification(
     sender: EmailSender = request.app.state.email_sender
     member = session.scalars(select(Member).where(Member.email == email)).first()
     if member is not None and member.email_verified_at is None:
-        code = _issue_code(session, member)
+        code = _issue_code(session, member, "verify", VERIFY_CODE_TTL)
         log_event(
             session, request, category="auth", action="auth.resend_verification", member=member
         )
         session.commit()
-        background.add_task(send_safely, sender, verification_email(settings, email, code))
+        background.add_task(
+            send_safely, sender, verification_email(settings, email, member.name, code)
+        )
         return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
     return SignupResponse(message=ACCEPTED_MESSAGE)
 
@@ -437,39 +397,35 @@ def logout(
     return MessageResponse(message="Signed out.")
 
 
-@router.post("/forgot-password", status_code=202, response_model=MessageResponse)
+@router.post("/forgot-password", status_code=202, response_model=SignupResponse)
 def forgot_password(
     body: EmailOnly, request: Request, session: SessionDep, background: BackgroundTasks
-) -> MessageResponse:
+) -> SignupResponse:
     email = str(body.email).strip().lower()
     _throttle(request, "forgot", email)
     settings: Settings = request.app.state.settings
     sender: EmailSender = request.app.state.email_sender
     member = session.scalars(select(Member).where(Member.email == email)).first()
     if member is not None and member.email_verified_at is not None:
-        token = _issue_token(session, member, "reset", RESET_TTL)
+        code = _issue_code(session, member, "reset", RESET_CODE_TTL)
         log_event(
             session, request, category="auth", action="auth.password_reset_requested", member=member
         )
         session.commit()
-        background.add_task(send_safely, sender, reset_email(settings, email, token))
-    return MessageResponse(message=ACCEPTED_MESSAGE)
+        background.add_task(send_safely, sender, reset_email(settings, email, member.name, code))
+        return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
+    return SignupResponse(message=ACCEPTED_MESSAGE)
 
 
 @router.post("/reset-password", response_model=MessageResponse)
 def reset_password(body: PasswordReset, request: Request, session: SessionDep) -> MessageResponse:
-    _throttle(request, "reset")
-    found = _find_token(session, body.token, "reset")
-    if found is None:
-        raise HTTPException(status_code=400, detail=INVALID_LINK)
-    token, member = found
-    now = datetime.now(UTC)
-    if token.used_at is not None or _aware(token.expires_at) <= now:
-        raise HTTPException(status_code=400, detail=INVALID_LINK)
-    token.used_at = now
+    email = str(body.email).strip().lower()
+    _throttle(request, "reset", email)
+    member = session.scalars(select(Member).where(Member.email == email)).first()
+    if member is None or member.email_verified_at is None:
+        raise HTTPException(status_code=400, detail=INVALID_CODE)
+    _consume_code(session, request, member, "reset", body.code, "auth.password_reset_failed")
     member.password_hash = hash_password(body.password)
-    if member.email_verified_at is None:
-        member.email_verified_at = now
     session.execute(delete(MemberSession).where(MemberSession.member_id == member.id))
     log_event(session, request, category="auth", action="auth.password_reset", member=member)
     session.commit()
