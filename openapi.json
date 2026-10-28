@@ -1489,6 +1489,9 @@
               }
             }
           },
+          "409": {
+            "description": "An account with this e-mail already exists."
+          },
           "429": {
             "description": "Rate limit exceeded"
           },

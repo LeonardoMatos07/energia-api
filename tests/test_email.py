@@ -100,7 +100,6 @@ def test_a_template_travels_to_relay_with_its_variables_and_key() -> None:
     [
         ("verification-code", {"name": "Ana", "code": "123456"}),
         ("reset-code", {"name": "Ana", "code": "123456"}),
-        ("existing-account", {"name": "Ana"}),
         ("report", {"name": "Ana", "unsubscribe_url": "https://x.test/u?a=1&b=2"}),
         ("analysis", {"name": "Ana"}),
         (
@@ -137,7 +136,11 @@ def test_every_template_renders_completely_with_only_its_variables(
 
 def test_the_name_is_escaped_in_the_html_and_not_in_the_text() -> None:
     message = template_message(
-        make_settings(), "existing-account", "a@example.org", {"name": "<b>Ana</b>"}
+        make_settings(),
+        "verification-code",
+        "a@example.org",
+        {"name": "<b>Ana</b>", "code": "123456"},
+        fixed={"minutes": 30},
     ).rendered()
     assert "<b>Ana</b>" not in message.html
     assert "&lt;b&gt;Ana&lt;/b&gt;" in message.html

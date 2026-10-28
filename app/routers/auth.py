@@ -41,6 +41,7 @@ SESSION_TTL = timedelta(days=14)
 ACCEPTED_MESSAGE = "If the address is valid, an e-mail is on its way."
 INVALID_CODE = "Invalid or expired code."
 INVALID_CREDENTIALS = "Invalid e-mail or password."
+ACCOUNT_EXISTS = "An account with this e-mail already exists."
 UNVERIFIED = "Email not verified."
 UNAUTHORIZED = "Authentication required."
 
@@ -177,10 +178,6 @@ def verification_email(settings: Settings, to: str, name: str, code: str) -> Ema
     )
 
 
-def existing_account_email(settings: Settings, to: str, name: str) -> EmailMessage:
-    return template_message(settings, "existing-account", to, {"name": first_name(name)})
-
-
 def reset_email(settings: Settings, to: str, name: str, code: str) -> EmailMessage:
     minutes = int(RESET_CODE_TTL.total_seconds() // 60)
     return template_message(
@@ -201,7 +198,10 @@ def first_name(name: str) -> str:
     "/signup",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=SignupResponse,
-    responses={429: {"description": "Rate limit exceeded"}},
+    responses={
+        409: {"description": ACCOUNT_EXISTS},
+        429: {"description": "Rate limit exceeded"},
+    },
 )
 def signup(
     body: MemberSignup, request: Request, session: SessionDep, background: BackgroundTasks
@@ -217,10 +217,7 @@ def signup(
     if existing is not None and existing.email_verified_at is not None:
         log_event(session, request, category="auth", action="auth.signup_existing")
         session.commit()
-        background.add_task(
-            send_safely, sender, existing_account_email(settings, email, existing.name)
-        )
-        return SignupResponse(message=ACCEPTED_MESSAGE)
+        raise HTTPException(status_code=409, detail=ACCOUNT_EXISTS)
     if existing is not None:
         _delete_member(session, existing)
         session.flush()
