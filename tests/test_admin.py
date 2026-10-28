@@ -239,8 +239,19 @@ def test_revalidate_default_tags(
     client: TestClient, admin_headers: dict[str, str], web_calls: list[httpx.Request]
 ) -> None:
     r = client.post(REVALIDATE, headers=admin_headers)
-    assert r.json()["tags"] == ["curtailment", "plants", "reports"]
-    assert json.loads(web_calls[0].content) == {"tags": ["curtailment", "plants", "reports"]}
+    all_tags = ["curtailment", "plants", "reports", "forecast"]
+    assert r.json()["tags"] == all_tags
+    assert json.loads(web_calls[0].content) == {"tags": all_tags}
+
+
+def test_revalidate_forecast_tag_clears_the_cache(
+    client: TestClient, admin_headers: dict[str, str], web_calls: list[httpx.Request]
+) -> None:
+    r = client.post(REVALIDATE, json={"tags": ["forecast"]}, headers=admin_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tags"] == ["forecast"] and body["cache_cleared"] is True
+    assert json.loads(web_calls[0].content) == {"tags": ["forecast"]}
 
 
 def test_revalidate_unknown_tag(client: TestClient, admin_headers: dict[str, str]) -> None:

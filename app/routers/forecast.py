@@ -6,8 +6,9 @@ API only reads the latest *ready* run, so it never calls the model, has no ML de
 keeps serving the last forecast (with its age) when the job is down.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import select
@@ -39,6 +40,15 @@ def risk_level(probability: float) -> Literal["baixo", "medio", "alto"]:
     if probability >= LEVEL_MEDIUM:
         return "medio"
     return "baixo"
+
+
+def local_now() -> datetime:
+    """Current hour in Brasilia time (naive), the clock the forecast hours use."""
+    try:
+        zone: ZoneInfo | timezone = ZoneInfo("America/Sao_Paulo")
+    except ZoneInfoNotFoundError:  # no tzdata installed; Brazil has had no DST since 2019
+        zone = timezone(timedelta(hours=-3))
+    return datetime.now(zone).replace(minute=0, second=0, microsecond=0, tzinfo=None)
 
 
 def _latest_run(session: Session) -> tuple[ForecastRun, ForecastModel] | None:
@@ -83,6 +93,7 @@ def forecast(
                 ForecastHourly.run_id == run.id,
                 ForecastHourly.source == source,
                 ForecastHourly.scope == scope,
+                ForecastHourly.hour_ts >= local_now(),  # only the hours still to come
             )
             .order_by(ForecastHourly.hour_ts)
             .limit(days * 24)
@@ -106,6 +117,8 @@ def forecast(
             source=source,
             risk_definition=RISK_DEFINITION,
             origin_ts=run.origin_ts.isoformat(),
+            valid_from=points[0].ts,
+            valid_to=points[-1].ts,
             generated_at=_aware(run.created_at),
             data_through=run.data_through,
             stale_days=max(0, (datetime.now(UTC).date() - run.data_through).days),
