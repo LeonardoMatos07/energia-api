@@ -20,10 +20,14 @@ def upgrade() -> None:
         sa.Column("recipients", sa.Integer(), nullable=False),
         sa.Column("sent", sa.Integer(), nullable=False),
         sa.Column("failed", sa.Integer(), nullable=False),
-        sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint("kind IN ('report', 'analysis')", name="ck_email_dispatch_kind"),
-        sa.CheckConstraint("status IN ('running', 'done', 'partial')", name="ck_email_dispatch_status"),
+        sa.CheckConstraint(
+            "status IN ('running', 'done', 'partial')", name="ck_email_dispatch_status"
+        ),
         sa.ForeignKeyConstraint(
             ["report_id"], ["monthly_report.id"], name="fk_email_dispatch_report_id_monthly_report"
         ),

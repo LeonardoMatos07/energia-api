@@ -32,7 +32,7 @@ dev = [
 [tool.uv]
 package = false
 exclude-newer = "2026-10-06T00:00:00Z"
-exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
+exclude-newer-package = { certifi = "2026-10-21T00:00:00Z", pillow = "2026-10-28T00:00:00Z" }
 
 [tool.ruff]
 line-length = 100
