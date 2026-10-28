@@ -74,7 +74,7 @@ def test_resubscribe_active_is_silent(
     client.get("/v1/newsletter/confirm", params={"token": _token(emails, CONFIRM_PATH)})
     before = _row(session)
     _subscribe(client, email="person@example.com")
-    assert len(emails.sent) == 1
+    assert len(emails.sent) == 2  # the confirmation, then the welcome; nothing for the repeat
     after = _row(session)
     assert after.unsubscribe_token_hash == before.unsubscribe_token_hash
     assert after.confirmed_at == before.confirmed_at
@@ -101,7 +101,7 @@ def test_resubscribe_after_unsubscribe(
     client.get("/v1/newsletter/confirm", params={"token": _token(emails, CONFIRM_PATH)})
     client.get("/v1/newsletter/unsubscribe", params={"token": _token(emails, UNSUBSCRIBE_PATH)})
     _subscribe(client)
-    assert len(emails.sent) == 2
+    assert len(emails.sent) == 3  # confirmation, welcome, then a new confirmation
     row = _row(session)
     assert row.confirmed_at is None and row.unsubscribed_at is None
     r = client.get("/v1/newsletter/confirm", params={"token": _token(emails, CONFIRM_PATH)})

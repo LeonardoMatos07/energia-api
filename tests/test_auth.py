@@ -456,10 +456,12 @@ def test_a_member_turns_the_monthly_e_mail_on_and_off_without_a_confirmation(
     assert on.status_code == 200
     assert on.json()["marketing_opt_in"] is True
     assert client.get("/v1/auth/me", headers=headers).json()["marketing_opt_in"] is True
-    assert len(emails.sent) == before
+    assert len(emails.sent) == before + 1  # the welcome; no confirmation to click
+    assert "Newsletter ativada" in emails.sent[-1].subject
 
     again = client.put("/v1/auth/me/newsletter", json={"enabled": True}, headers=headers)
     assert again.json()["marketing_opt_in"] is True
+    assert len(emails.sent) == before + 1  # already on: nothing more is sent
 
     off = client.put("/v1/auth/me/newsletter", json={"enabled": False}, headers=headers)
     assert off.json()["marketing_opt_in"] is False

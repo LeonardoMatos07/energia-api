@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionDep
+from app.dispatch import Recipient
 from app.email import EmailMessage, EmailSender, send_safely, template_message
 from app.events import log_event
 from app.leads import score_lead
@@ -31,6 +32,7 @@ from app.schemas import (
     VerifiedResponse,
 )
 from app.security import DUMMY_HASH, hash_password, hash_token, new_token, verify_password
+from app.welcome import send_all, welcome_messages
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -386,7 +388,11 @@ def me(member: CurrentMember) -> MemberProfile:
     responses={401: {"description": UNAUTHORIZED}},
 )
 def set_newsletter(
-    body: NewsletterPreference, member: CurrentMember, request: Request, session: SessionDep
+    body: NewsletterPreference,
+    member: CurrentMember,
+    request: Request,
+    session: SessionDep,
+    background: BackgroundTasks,
 ) -> MemberProfile:
     """Turns the monthly e-mail (report and analyses) on or off for a signed-in member. Their
     address is already verified, so there is no confirmation e-mail to click."""
@@ -395,6 +401,15 @@ def set_newsletter(
         action = "auth.newsletter_enabled" if body.enabled else "auth.newsletter_disabled"
         log_event(session, request, category="auth", action=action, member=member)
         session.commit()
+        if body.enabled:
+            settings: Settings = request.app.state.settings
+            recipient = Recipient(
+                member.email,
+                first_name(member.name),
+                f"{settings.web_url}/newsletter/descadastrar",
+            )
+            messages = welcome_messages(session, settings, recipient)
+            background.add_task(send_all, request.app.state.email_sender, messages)
     return MemberProfile.model_validate(member)
 
 

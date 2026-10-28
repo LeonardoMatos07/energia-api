@@ -14,6 +14,7 @@ from markdown_it.token import Token
 
 from app.exporting.charts import chart_html, chart_text, parse_chart
 from app.exporting.data import Analysis, tables
+from app.exporting.kpis import Kpi, kpis_html, kpis_text
 from app.exporting.pdf import number
 
 TEXT_LIMIT = 2_800
@@ -126,9 +127,22 @@ def markdown_text(content: str, limit: int = TEXT_LIMIT) -> str:
     return "\n\n".join(out)
 
 
-def report_blocks(content: str, url: str) -> tuple[str, str]:
+def strip_section(content: str, heading: str) -> str:
+    """The Markdown without one `## heading` section (up to the next `## `)."""
+    pattern = re.compile(rf"^## {re.escape(heading)}\n.*?(?=^## |\Z)", re.MULTILINE | re.DOTALL)
+    return pattern.sub("", content, count=1)
+
+
+def report_blocks(content: str, url: str, kpis: list[Kpi] | None = None) -> tuple[str, str]:
+    """The report for the body of an e-mail. With `kpis`, the month's numbers open it as tiles
+    and replace the report's own "O mês em números" list, which would repeat them."""
+    if kpis:
+        content = strip_section(content, "O mês em números")
     html = markdown_html(content)
     text = markdown_text(content)
+    if kpis:
+        html = kpis_html(kpis) + html
+        text = f"{kpis_text(kpis)}\n\n{text}"
     if len(html) > HTML_LIMIT:
         html = (
             f'<p style="{_STYLES["p"]}">Este relatório é longo demais para um e-mail. '

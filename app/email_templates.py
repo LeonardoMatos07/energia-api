@@ -122,6 +122,21 @@ SPECS: dict[str, _Spec] = {
         ),
         footer=FOOTER_UNSUBSCRIBE,
     ),
+    "newsletter-welcome": _Spec(
+        subject="Newsletter ativada: bem-vindo ao relatório mensal do Spillway",
+        preheader="Em poucos minutos você recebe o relatório mais recente.",
+        text=(
+            "Parabéns, {{name}}!\n\n"
+            "Você ativou a newsletter mensal do Spillway, e é gratuita.\n\n"
+            "Todo mês, assim que o ONS atualiza os dados, você recebe um relatório geral do "
+            "curtailment de energia eólica e solar no Brasil: os números do mês, gráficos, os "
+            "estados e usinas mais afetados e o que mudou em relação ao período anterior.\n\n"
+            "[[latest_line]]\n\n"
+            "Todos os relatórios: [[reports_url]]\n\n"
+            "Para cancelar: {{unsubscribe_url}}\n"
+        ),
+        footer=FOOTER_UNSUBSCRIBE,
+    ),
     "report": _Spec(
         subject="Relatório de [[month_label]]: [[report_title]]",
         preheader="O relatório mensal de [[month_label]] já está no ar.",
