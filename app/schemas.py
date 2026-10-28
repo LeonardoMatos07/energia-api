@@ -231,6 +231,30 @@ class ReportListResponse(BaseModel):
     items: list[ReportSummary]
 
 
+class DispatchInput(BaseModel):
+    kind: Literal["report", "analysis"]
+    month: Month | None = Field(
+        default=None, description="Defaults to the month of the latest published report."
+    )
+    retry: bool = Field(default=False, description="Finish a send that stopped partway.")
+
+
+class Dispatch(_Orm):
+    id: int
+    kind: Literal["report", "analysis"]
+    month: Month
+    status: Literal["running", "done", "partial"]
+    recipients: int
+    sent: int
+    failed: int
+    started_at: datetime
+    finished_at: datetime | None
+
+
+class DispatchListResponse(BaseModel):
+    items: list[Dispatch]
+
+
 class AdminReportListResponse(BaseModel):
     items: list[AdminReport]
 

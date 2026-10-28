@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionDep
+from app.dispatch import verify_unsubscribe_token
 from app.email import EmailMessage, EmailSender, send_safely, template_message
 from app.events import log_event
 from app.models import NewsletterSubscriber
@@ -180,11 +181,16 @@ def confirm(request: Request, session: SessionDep, token: TokenQuery) -> Confirm
     responses={400: {"description": INVALID_LINK}},
 )
 def unsubscribe(request: Request, session: SessionDep, token: TokenQuery) -> UnsubscribedResponse:
-    subscriber = session.scalars(
-        select(NewsletterSubscriber).where(
-            NewsletterSubscriber.unsubscribe_token_hash == hash_token(token)
-        )
-    ).first()
+    settings: Settings = request.app.state.settings
+    subscriber_id = verify_unsubscribe_token(settings, token)
+    if subscriber_id is not None:
+        subscriber = session.get(NewsletterSubscriber, subscriber_id)
+    else:
+        subscriber = session.scalars(
+            select(NewsletterSubscriber).where(
+                NewsletterSubscriber.unsubscribe_token_hash == hash_token(token)
+            )
+        ).first()
     if subscriber is None:
         raise HTTPException(status_code=400, detail=INVALID_LINK)
     if subscriber.unsubscribed_at is None:
