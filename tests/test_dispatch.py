@@ -37,6 +37,21 @@ def subscriber(email: str, *, confirmed: bool = True, unsubscribed: bool = False
     )
 
 
+REPORT_MARKDOWN = """## Resumo do mês
+
+O corte chegou a **1.200 GWh** no Nordeste, veja [o painel](https://example.org/painel).
+
+- Bahia lidera
+- <script>alert(1)</script> não vira código
+
+Fórmula de exemplo: {{name}} e {{code}} aparecem como escritos.
+
+| Estado | Corte |
+|---|---|
+| BA | 10 % |
+"""
+
+
 @pytest.fixture
 def audience(session: Session) -> None:
     session.add_all(
@@ -61,7 +76,7 @@ def report(session: Session) -> MonthlyReport:
         title="Corte <em>recorde</em> em setembro",
         slug="corte-recorde",
         summary="O corte voltou a subir.",
-        content="x",
+        content=REPORT_MARKDOWN,
         published_at=NOW,
     )
     session.add(row)
@@ -214,3 +229,62 @@ def test_a_send_that_fails_halfway_can_be_finished_without_repeating(
     assert (row.status, row.failed) == ("done", 0)
     assert len({k for k in keys.values()}) == 3
     assert all(k.startswith("energia-report-2026-09-") for k in keys.values())
+
+
+@pytest.mark.usefixtures("audience", "report")
+def test_the_report_is_in_the_body_of_the_e_mail(
+    client: TestClient, admin_headers: dict[str, str], emails: FakeEmailSender
+) -> None:
+    start(client, admin_headers, kind="report", month="2026-09")
+    email = next(m for m in emails.sent if m.to == "ana@example.org")
+
+    assert "<h2" in email.html
+    assert "Resumo do mês" in email.html
+    assert "<strong>1.200 GWh</strong>" in email.html
+    assert '<a href="https://example.org/painel"' in email.html
+    assert "<table" in email.html
+    assert "<script>" not in email.html
+    assert "&lt;script&gt;" in email.html
+    assert "{{name}} e {{code}} aparecem como escritos" in email.html.replace("&#123;&#123;", "{{")
+    assert "Resumo do mês" in email.text
+    assert "- Bahia lidera" in email.text
+    assert "Relatório completo: http://web.test/relatorios/corte-recorde" in email.text
+    assert len(email.text) < 4_000
+
+
+@pytest.mark.usefixtures("audience", "report")
+def test_text_in_the_report_cannot_be_read_as_a_placeholder_by_relay(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    from app.dispatch import build_messages, content_blocks, recipients_for
+    from app.email_templates import placeholders
+    from app.models import MonthlyReport as Report
+
+    settings = make_settings()
+    with client.app.state.sessionmaker() as db:  # type: ignore[attr-defined]
+        row = db.scalars(select(Report)).one()
+        blocks = content_blocks(db, settings, "report", row.month, row)
+        messages = build_messages(
+            settings, "report", row.month, recipients_for(db, settings, "report"), row, blocks
+        )
+    for message in messages:
+        assert set(placeholders(message.html)) == {"name", "unsubscribe_url"}
+        assert set(placeholders(message.text)) == {"name", "unsubscribe_url"}
+
+
+@pytest.mark.usefixtures("audience", "seed")
+def test_the_analyses_are_in_the_body_of_the_e_mail(
+    client: TestClient,
+    admin_headers: dict[str, str],
+    emails: FakeEmailSender,
+) -> None:
+    start(client, admin_headers, kind="analysis", month="2026-09")
+    email = emails.sent[0]
+
+    assert "Energia cortada" in email.html
+    assert "Motivos do corte" in email.html
+    assert "Confiabilidade elétrica" in email.html
+    assert "MWh" in email.text
+    assert "http://web.test/analises?de=2026-09&amp;ate=2026-09" in email.html
+    assert "http://web.test/analises?de=2026-09&ate=2026-09" in email.text
+    assert len(email.text) < 4_000

@@ -25,6 +25,8 @@ from app.config import Settings, get_settings
 from app.db import make_engine, make_sessionmaker
 from app.email import EmailMessage, EmailSender, make_email_sender, template_message
 from app.email_templates import month_label
+from app.exporting.data import load_analysis
+from app.exporting.email_content import analysis_blocks, report_blocks
 from app.models import EmailDispatch, Member, MonthlyReport, NewsletterSubscriber
 from app.schemas import parse_month
 
@@ -109,6 +111,7 @@ def build_messages(
     month: date,
     recipients: list[Recipient],
     report: MonthlyReport | None,
+    blocks: dict[str, tuple[str, str]],
 ) -> list[EmailMessage]:
     label = month_label(month.year, month.month)
     messages: list[EmailMessage] = []
@@ -124,6 +127,9 @@ def build_messages(
                 "report_summary": report.summary or SUMMARY_FALLBACK,
                 "report_url": f"{settings.web_url}/relatorios/{report.slug}",
             }
+        if kind == "analysis":
+            period = f"{month:%Y-%m}"
+            fixed["analysis_url"] = f"{settings.web_url}/analises?de={period}&ate={period}"
         messages.append(
             template_message(
                 settings,
@@ -131,10 +137,27 @@ def build_messages(
                 recipient.email,
                 variables,
                 fixed=fixed,
+                blocks=blocks,
                 idempotency_key=_key(kind, month, recipient.email),
             )
         )
     return messages
+
+
+def content_blocks(
+    session: Session, settings: Settings, kind: Kind, month: date, report: MonthlyReport | None
+) -> dict[str, tuple[str, str]]:
+    """What goes in the body of the e-mail: the report itself, or the month's analyses."""
+    if kind == "report":
+        if report is None:
+            raise DispatchError("a report dispatch needs its report")
+        return {
+            "content": report_blocks(report.content, f"{settings.web_url}/relatorios/{report.slug}")
+        }
+    period = f"{month:%Y-%m}"
+    data = load_analysis(session, "SIN", "total", month, month)
+    url = f"{settings.web_url}/analises?de={period}&ate={period}"
+    return {"content": analysis_blocks(data, url)}
 
 
 def latest_report(session: Session, month: date | None = None) -> MonthlyReport | None:
@@ -189,7 +212,8 @@ def run_dispatch(
         kind: Kind = "report" if row.kind == "report" else "analysis"
         report = session.get(MonthlyReport, row.report_id) if row.report_id else None
         recipients = recipients_for(session, settings, kind)
-        messages = build_messages(settings, kind, row.month, recipients, report)
+        blocks = content_blocks(session, settings, kind, row.month, report)
+        messages = build_messages(settings, kind, row.month, recipients, report, blocks)
         row.recipients = len(messages)
         row.sent = row.failed = 0
         session.commit()

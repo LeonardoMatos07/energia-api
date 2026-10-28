@@ -23,6 +23,7 @@ Variables = Mapping[str, str | int]
 
 _RUNTIME = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 _BUILD = re.compile(r"\[\[([a-z_]+)\]\]")
+_BLOCK = re.compile(r"\[\[block:([a-z_]+)\]\]")
 
 
 @dataclass(frozen=True)
@@ -140,7 +141,7 @@ SPECS: dict[str, _Spec] = {
             "Olá, {{name}}!\n\n"
             "Relatório mensal de [[month_label]]: [[report_title]]\n"
             "[[report_summary]]\n\n"
-            "Leia em: [[report_url]]\n\n"
+            "[[block:content]]\n\n"
             "Para cancelar a inscrição: {{unsubscribe_url}}\n"
         ),
         footer=FOOTER_UNSUBSCRIBE,
@@ -150,10 +151,8 @@ SPECS: dict[str, _Spec] = {
         preheader="Novas análises de curtailment: compensação, empresas e perfil horário.",
         text=(
             "Olá, {{name}}!\n\n"
-            "As análises de curtailment de [[month_label]] estão prontas: quanto do corte é "
-            "potencialmente compensável, quais empresas e pontos de conexão mais perdem e em "
-            "que horas a energia sobra.\n\n"
-            "Veja em: [[analysis_url]]\n\n"
+            "As análises de curtailment de [[month_label]] estão prontas.\n\n"
+            "[[block:content]]\n\n"
             "Gerenciar preferências: [[account_url]]\n"
         ),
         footer=FOOTER_MANAGE,
@@ -184,8 +183,17 @@ def _shorten(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
 
 
-def build(name: str, web_url: str, **fixed: str | int) -> EmailTemplate:
-    """The template with its `[[fixed]]` values filled and `{{per_recipient}}` ones left."""
+def build(
+    name: str,
+    web_url: str,
+    blocks: Mapping[str, tuple[str, str]] | None = None,
+    **fixed: str | int,
+) -> EmailTemplate:
+    """The template with its `[[fixed]]` values filled and `{{per_recipient}}` ones left.
+
+    `[[block:name]]` takes a ready-made `(html, text)` pair, such as the body of a report. The
+    HTML goes in as it is, so only build blocks from content that was escaped or sanitised.
+    """
     spec = SPECS[name]
     values: dict[str, str] = {
         "web_url": web_url,
@@ -195,14 +203,26 @@ def build(name: str, web_url: str, **fixed: str | int) -> EmailTemplate:
         "analysis_url": f"{web_url}/analises",
         **{key: str(value) for key, value in fixed.items()},
     }
+    pairs = blocks or {}
     layout = _read("layout")
     html = layout.replace("[[content]]", _read(name)).replace("[[footer]]", spec.footer)
     html = html.replace("[[preheader]]", escape(spec.preheader, quote=False))
     subject_values = {**values, "report_title": _shorten(values.get("report_title", ""), 120)}
+    filled_html = _fill(html, values, html=True)
+    filled_text = _fill(spec.text, values, html=False)
+    variables = placeholders(spec.subject + spec.text + html)
+    # Blocks go in last: their content is not a template, so neither the `[[...]]` filling nor
+    # Relay's `{{...}}` may touch it.
     return EmailTemplate(
         name=name,
         subject=_fill(spec.subject, subject_values, html=False),
-        text=_fill(spec.text, values, html=False),
-        html=_fill(html, values, html=True),
-        variables=placeholders(spec.subject + spec.text + html),
+        text=_BLOCK.sub(lambda m: _inert(pairs[m[1]][1], html=False), filled_text),
+        html=_BLOCK.sub(lambda m: _inert(pairs[m[1]][0], html=True), filled_html),
+        variables=variables,
     )
+
+
+def _inert(fragment: str, *, html: bool) -> str:
+    """The fragment with `{{` made harmless, so a report that mentions `{{name}}` is shown as
+    written instead of being read as a placeholder."""
+    return fragment.replace("{{", "&#123;&#123;" if html else "{​{")

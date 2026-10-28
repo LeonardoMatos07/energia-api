@@ -119,7 +119,10 @@ def test_every_template_renders_completely_with_only_its_variables(
         "report_summary": "Resumo.",
         "report_url": "https://x.test/relatorios/a",
     }
-    message = template_message(make_settings(), name, "ana@example.org", variables, fixed=fixed)
+    blocks = {"content": ("<p>conteúdo</p>", "conteúdo")}
+    message = template_message(
+        make_settings(), name, "ana@example.org", variables, fixed=fixed, blocks=blocks
+    )
     rendered = message.rendered()
 
     for part in (rendered.subject, rendered.text, rendered.html):
@@ -127,7 +130,9 @@ def test_every_template_renders_completely_with_only_its_variables(
         assert "[[" not in part
     assert "<html" in rendered.html
     assert "Spillway" in rendered.html
-    assert set(build(name, "https://x.test", **fixed).variables) == set(variables)
+    assert set(build(name, "https://x.test", {"content": ("", "")}, **fixed).variables) == set(
+        variables
+    )
 
 
 def test_the_name_is_escaped_in_the_html_and_not_in_the_text() -> None:
@@ -152,6 +157,7 @@ def test_a_long_report_title_is_shortened_in_the_subject_only() -> None:
     template = build(
         "report",
         "https://x.test",
+        {"content": ("<p>c</p>", "c")},
         report_title=title,
         month_label="maio de 2026",
         report_summary="x",

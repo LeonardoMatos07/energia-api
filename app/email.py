@@ -50,11 +50,12 @@ def template_message(
     variables: Variables,
     *,
     fixed: Mapping[str, str | int] | None = None,
+    blocks: Mapping[str, tuple[str, str]] | None = None,
     idempotency_key: str | None = None,
 ) -> EmailMessage:
     """An e-mail from one of Spillway's templates: `fixed` fills the `[[...]]` placeholders now,
     `variables` the `{{...}}` ones (here or in Relay)."""
-    template = build(name, settings.web_url, **(fixed or {}))
+    template = build(name, settings.web_url, blocks, **(fixed or {}))
     return EmailMessage(
         to=to,
         subject=template.subject,
