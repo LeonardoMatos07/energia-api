@@ -1,12 +1,12 @@
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from app.config import Settings
 from app.db import SessionDep
-from app.exporting.data import Analysis, load_analysis, tables
-from app.exporting.files import XLSX_MEDIA_TYPE, to_csv, to_xlsx
+from app.exporting.data import Analysis, load_analysis
+from app.exporting.files import XLSX_MEDIA_TYPE, ZIP_MEDIA_TYPE, to_csv_zip, to_xlsx
 from app.exporting.pdf import analysis_pdf
 from app.ratelimit import RateLimiter
 from app.routers.newsletter import client_ip
@@ -15,8 +15,6 @@ from app.schemas import MONTH_PATTERN, AggregateSource, SubsystemOrSin, parse_mo
 router = APIRouter(prefix="/v1/exports", tags=["exports"])
 
 MonthQuery = Annotated[str | None, Query(pattern=MONTH_PATTERN, examples=["2026-09"])]
-Dataset = Literal["summary", "subsystems", "operators", "connection-points", "hourly"]
-CSV_MEDIA_TYPE = "text/csv; charset=utf-8"
 PDF_MEDIA_TYPE = "application/pdf"
 
 
@@ -81,16 +79,14 @@ def analysis_xlsx_file(
     return download(to_xlsx(data), XLSX_MEDIA_TYPE, f"{data.file_stem}.xlsx")
 
 
-@router.get("/{dataset}.csv", summary="One analysis table as CSV")
+@router.get("/analysis-csv.zip", summary="Every analysis table as CSV files in one zip")
 def analysis_csv_file(
     request: Request,
     session: SessionDep,
-    dataset: Dataset,
     scope: SubsystemOrSin = "SIN",
     source: AggregateSource = "total",
     start: MonthQuery = None,
     end: MonthQuery = None,
 ) -> Response:
     data = _analysis(request, session, scope, source, start, end)
-    table = tables(data)[dataset]
-    return download(to_csv(table), CSV_MEDIA_TYPE, f"{data.file_stem}-{dataset}.csv")
+    return download(to_csv_zip(data), ZIP_MEDIA_TYPE, f"{data.file_stem}-csv.zip")

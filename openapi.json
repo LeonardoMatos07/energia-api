@@ -1206,30 +1206,14 @@
         }
       }
     },
-    "/v1/exports/{dataset}.csv": {
+    "/v1/exports/analysis-csv.zip": {
       "get": {
         "tags": [
           "exports"
         ],
-        "summary": "One analysis table as CSV",
-        "operationId": "analysis_csv_file_v1_exports__dataset__csv_get",
+        "summary": "Every analysis table as CSV files in one zip",
+        "operationId": "analysis_csv_file_v1_exports_analysis_csv_zip_get",
         "parameters": [
-          {
-            "name": "dataset",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "enum": [
-                "summary",
-                "subsystems",
-                "operators",
-                "connection-points",
-                "hourly"
-              ],
-              "type": "string",
-              "title": "Dataset"
-            }
-          },
           {
             "name": "scope",
             "in": "query",

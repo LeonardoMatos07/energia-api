@@ -47,7 +47,6 @@ AMBER = colors.HexColor("#f59e0b")
 
 PAGE_MARGIN = 18 * mm
 CONTENT_WIDTH = A4[0] - 2 * PAGE_MARGIN
-TOP_ROWS = 15
 HOURS = 24
 
 _styles = getSampleStyleSheet()
@@ -214,7 +213,7 @@ def _reasons(data: Analysis) -> Table:
 
 
 def _ranking(table: DataTable) -> Table:
-    shown = table.rows[:TOP_ROWS]
+    shown = table.rows
     with_state = any(r[2] for r in shown)
     header = ["#", table.headers[1], "UF", "Usinas afetadas", "Cortada (MWh)", "Corte (%)"]
     header.append("Compensável (MWh)")
@@ -306,39 +305,111 @@ def _hourly_chart(data: Analysis) -> Drawing:
     return drawing
 
 
+def _monthly_series(data: Analysis) -> Table:
+    rows = [
+        [
+            f"{r.month:%m/%Y}",
+            number(r.verified_generation_mwh),
+            number(r.curtailed_mwh),
+            number(r.curtailment_pct, 1),
+            number(r.estimated_loss_brl),
+            number(r.affected_plants),
+        ]
+        for r in data.subsystems
+        if r.subsystem == data.scope
+    ]
+    w = CONTENT_WIDTH
+    return _grid(
+        [
+            "Mês",
+            "Geração (MWh)",
+            "Cortada (MWh)",
+            "Corte (%)",
+            "Perda estimada (R$)",
+            "Usinas afetadas",
+        ],
+        rows,
+        [w * 0.14, w * 0.2, w * 0.2, w * 0.12, w * 0.2, w * 0.14],
+    )
+
+
+def _hourly_table(data: Analysis) -> Table:
+    by_key = {(p.day_type, p.hour): p for p in data.hourly.points}
+    rows = []
+    for hour in range(HOURS):
+        cells = [f"{hour:02d}h"]
+        for day_type in ("weekday", "weekend"):
+            point = by_key.get((day_type, hour))
+            cells += [
+                number(point.avg_curtailed_mwh if point else None),
+                number(point.curtailment_pct if point else None, 1),
+            ]
+        rows.append(cells)
+    w = CONTENT_WIDTH
+    return _grid(
+        [
+            "Hora",
+            "Dia útil: corte médio (MWh)",
+            "Dia útil: corte (%)",
+            "Fim de semana: corte médio (MWh)",
+            "Fim de semana: corte (%)",
+        ],
+        rows,
+        [w * 0.12, w * 0.22, w * 0.18, w * 0.28, w * 0.2],
+    )
+
+
 def analysis_pdf(data: Analysis) -> bytes:
+    """The analyses page on paper: the same three views (compensation, companies and connection
+    points, hourly profile), with every row instead of the first few. The detail by state and by
+    plant is in the data files, where it is usable."""
     all_tables = tables(data)
+    s = data.summary
     subtitle = f"Escopo {data.scope} · {SOURCE_LABELS[data.source]} · período {data.period_label}"
     story: list[Flowable] = _cover("Análises de curtailment", "Análise de curtailment", subtitle)
-    story += [_kpis(data), Spacer(1, 10)]
-    story += [Paragraph("Motivos do corte", H2), _reasons(data)]
+
+    story += [Paragraph("Compensação", H1), _kpis(data), Spacer(1, 10)]
+    story += [Paragraph("Motivos do corte", H3), _reasons(data)]
+    compensable = (s.curtailed_rel_mwh or 0) + (s.curtailed_cnf_mwh or 0)
+    share = number(100 * compensable / s.curtailed_mwh if s.curtailed_mwh else None, 1)
     story += [
+        Spacer(1, 4),
         Paragraph(
-            "Confiabilidade elétrica e indisponibilidade externa são os cortes que podem dar "
-            "direito a ressarcimento; razão energética e outros não.",
+            f"Confiabilidade elétrica e indisponibilidade externa somam {number(compensable)} MWh "
+            f"({share} % do corte), a parcela que pode dar direito a ressarcimento. Razão "
+            "energética e outros motivos não.",
             SMALL,
-        )
+        ),
+        Paragraph("Série mensal", H3),
+        _monthly_series(data),
     ]
-    story += [Paragraph(text("Empresas que mais perdem"), H2), _ranking(all_tables["operators"])]
+
     story += [
-        Paragraph("Pontos de conexão que mais perdem", H2),
+        Paragraph("Empresas e conexões", H1),
+        Paragraph(f"Empresas com mais energia cortada ({len(data.operators)})", H3),
+        _ranking(all_tables["operators"]),
+        Paragraph(
+            f"Pontos de conexão com mais energia cortada ({len(data.connection_points)})", H3
+        ),
         _ranking(all_tables["connection-points"]),
     ]
+
     if data.hourly.points:
         story += [
+            Paragraph("Perfil horário", H1),
             KeepTogether(
                 [
-                    Paragraph("Em que horas a energia sobra", H2),
                     _hourly_chart(data),
                     Paragraph(text(all_tables["hourly"].note or ""), SMALL),
                 ]
-            )
+            ),
+            _hourly_table(data),
         ]
     story += [
         Spacer(1, 8),
         Paragraph(
-            "Dados do ONS e da CCEE tratados pelo Spillway. Os valores completos estão disponíveis "
-            "em CSV e Excel no site.",
+            "Dados do ONS e da CCEE tratados pelo Spillway. O detalhe por estado e por usina, mês "
+            "a mês, está nos arquivos de dados (Excel ou CSV).",
             SMALL,
         ),
     ]
