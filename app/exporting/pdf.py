@@ -5,6 +5,7 @@ outside it is replaced instead of printed as a box.
 """
 
 import io
+import math
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Any
@@ -214,6 +215,10 @@ def _reasons(data: Analysis) -> Table:
 
 def _ranking(table: DataTable) -> Table:
     shown = table.rows[:TOP_ROWS]
+    with_state = any(r[2] for r in shown)
+    header = ["#", table.headers[1], "UF", "Usinas afetadas", "Cortada (MWh)", "Corte (%)"]
+    header.append("Compensável (MWh)")
+    widths = [0.05, 0.33, 0.06, 0.12, 0.16, 0.11, 0.17]
     rows = [
         [
             number(r[0]),
@@ -226,20 +231,20 @@ def _ranking(table: DataTable) -> Table:
         ]
         for r in shown
     ]
-    w = CONTENT_WIDTH
-    return _grid(
-        [
-            "#",
-            table.headers[1],
-            "UF",
-            "Usinas afetadas",
-            "Cortada (MWh)",
-            "Corte (%)",
-            "Compensável (MWh)",
-        ],
-        rows,
-        [w * 0.05, w * 0.33, w * 0.06, w * 0.12, w * 0.16, w * 0.11, w * 0.17],
-    )  # fmt: skip
+    if not with_state:
+        header.pop(2)
+        widths[1] += widths.pop(2)
+        rows = [row[:2] + row[3:] for row in rows]
+    return _grid(header, rows, [CONTENT_WIDTH * share for share in widths])
+
+
+def _nice_step(raw: float) -> float:
+    """1, 2 or 5 times a power of ten, so the axis counts in round numbers."""
+    magnitude = 10 ** math.floor(math.log10(raw))
+    for factor in (1, 2, 5, 10):
+        if raw <= factor * magnitude:
+            return float(factor * magnitude)
+    return float(10 * magnitude)
 
 
 def _hourly_chart(data: Analysis) -> Drawing:
@@ -258,19 +263,46 @@ def _hourly_chart(data: Analysis) -> Drawing:
     plot.xValueAxis.valueMin, plot.xValueAxis.valueMax = 0, HOURS - 1
     plot.xValueAxis.valueSteps = list(range(0, HOURS, 3))
     peak = max((value for line in plot.data for _, value in line), default=0.0)
-    top = peak * 1.1 if peak > 0 else 1.0
+    step = _nice_step(peak / 5 if peak > 0 else 1.0)
     plot.yValueAxis.valueMin = 0
-    plot.yValueAxis.valueMax = top
-    plot.yValueAxis.valueStep = top / 5
+    plot.yValueAxis.valueMax = step * (int(peak / step) + 1)
+    plot.yValueAxis.valueStep = step
+    plot.yValueAxis.labelTextFormat = lambda value: number(value)
+    plot.xValueAxis.labels.fontName = plot.yValueAxis.labels.fontName = "Helvetica"
     plot.xValueAxis.labels.fontSize = plot.yValueAxis.labels.fontSize = 7
     plot.yValueAxis.gridStrokeColor = LINE
     plot.yValueAxis.visibleGrid = True
     drawing.add(plot)
     drawing.add(
-        String(38, height - 10, "Corte médio (MWh) por hora do dia", fontSize=8, fillColor=MUTED)
+        String(
+            38,
+            height - 10,
+            "Corte médio (MWh) por hora do dia",
+            fontSize=8,
+            fontName="Helvetica",
+            fillColor=MUTED,
+        )
     )
-    drawing.add(String(width - 150, height - 10, "— Dia útil", fontSize=8, fillColor=ACCENT))
-    drawing.add(String(width - 78, height - 10, "— Fim de semana", fontSize=8, fillColor=AMBER))
+    drawing.add(
+        String(
+            width - 150,
+            height - 10,
+            "— Dia útil",
+            fontSize=8,
+            fontName="Helvetica",
+            fillColor=ACCENT,
+        )
+    )
+    drawing.add(
+        String(
+            width - 78,
+            height - 10,
+            "— Fim de semana",
+            fontSize=8,
+            fontName="Helvetica",
+            fillColor=AMBER,
+        )
+    )
     return drawing
 
 
