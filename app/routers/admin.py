@@ -114,7 +114,7 @@ def notify_web(
     settings: Settings, tags: list[RevalidateTag], transport: httpx.BaseTransport | None = None
 ) -> tuple[bool, str | None]:
     if not settings.REVALIDATE_SECRET:
-        return False, "REVALIDATE_SECRET is not set; energy-web was not called."
+        return False, "REVALIDATE_SECRET is not set; spillway-web was not called."
     url = f"{settings.web_url}/api/revalidate"
     try:
         with httpx.Client(timeout=settings.REVALIDATE_TIMEOUT_SECONDS, transport=transport) as c:
@@ -125,8 +125,8 @@ def notify_web(
             )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        logger.warning("failed to revalidate energy-web (%s): %s", url, exc)
-        return False, f"failed to call energy-web: {type(exc).__name__}"
+        logger.warning("failed to revalidate spillway-web (%s): %s", url, exc)
+        return False, f"failed to call spillway-web: {type(exc).__name__}"
     return True, None
 
 

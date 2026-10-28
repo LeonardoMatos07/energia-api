@@ -1,7 +1,7 @@
 # 3. Idempotent monthly loads with a rolling three-month reprocessing window
 
 - **Status:** Accepted
-- **Scope:** energy-data
+- **Scope:** spillway-data
 
 ## Context
 

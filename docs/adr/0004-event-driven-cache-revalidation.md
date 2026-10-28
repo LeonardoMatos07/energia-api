@@ -1,7 +1,7 @@
 # 4. Event-driven cache revalidation from the pipeline to the portal
 
 - **Status:** Accepted
-- **Scope:** energy-data, energy-api, energy-web
+- **Scope:** spillway-data, spillway-api, spillway-web
 
 ## Context
 
@@ -16,11 +16,11 @@ cache alone either serves stale data for too long or hits the API too often.
   one-hour time-based fallback. Dynamic pages render on first access, so the build does not
   depend on the API.
 - After each successful load, the pipeline triggers a chain:
-  1. `energy-data` calls `POST /v1/admin/revalidate` with a **Cognito machine token**
+  1. `spillway-data` calls `POST /v1/admin/revalidate` with a **Cognito machine token**
      (client credentials, `admin` scope).
-  2. `energy-api` clears its own cache and calls the portal's `/api/revalidate` with a shared
+  2. `spillway-api` clears its own cache and calls the portal's `/api/revalidate` with a shared
      secret.
-  3. `energy-web` compares the secret in **constant time** and calls `revalidateTag` for each
+  3. `spillway-web` compares the secret in **constant time** and calls `revalidateTag` for each
      tag.
 
 ## Consequences

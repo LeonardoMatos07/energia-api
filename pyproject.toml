@@ -1,5 +1,5 @@
 [project]
-name = "energy-api"
+name = "spillway-api"
 version = "0.1.0"
 description = "API of the energy data platform (Phase 1: wind and solar curtailment monitor)"
 readme = "README.md"
