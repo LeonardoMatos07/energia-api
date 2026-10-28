@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionDep
-from app.email import EmailMessage, EmailSender, send_safely
+from app.email import EmailMessage, EmailSender, send_safely, template_message
 from app.events import log_event
 from app.leads import score_lead
 from app.models import Member, MemberSession, MemberToken, UsageEvent
@@ -166,66 +166,35 @@ def _consume_code(
     return token
 
 
-def verification_email(settings: Settings, to: str, code: str) -> EmailMessage:
+def verification_email(settings: Settings, to: str, name: str, code: str) -> EmailMessage:
     minutes = int(VERIFY_CODE_TTL.total_seconds() // 60)
-    text = (
-        "Olá!\n\n"
-        "Recebemos um cadastro no Spillway com este e-mail.\n"
-        f"Seu código de verificação é: {code}\n\n"
-        f"Digite esse código na tela de cadastro. Ele vale por {minutes} minutos.\n"
-        "Se não foi você, ignore este e-mail: nada será ativado.\n"
+    return template_message(
+        settings,
+        "verification-code",
+        to,
+        {"name": first_name(name), "code": code},
+        fixed={"minutes": minutes},
     )
-    html = (
-        "<p>Olá!</p>"
-        "<p>Recebemos um cadastro no Spillway com este e-mail.</p>"
-        "<p>Seu código de verificação é:</p>"
-        f'<p style="font-size:28px;font-weight:700;letter-spacing:6px">{code}</p>'
-        f"<p>Digite esse código na tela de cadastro. Ele vale por {minutes} minutos.</p>"
-        "<p>Se não foi você, ignore este e-mail: nada será ativado.</p>"
-    )
-    return EmailMessage(to=to, subject=f"Seu código do Spillway: {code}", text=text, html=html)
 
 
-def existing_account_email(settings: Settings, to: str) -> EmailMessage:
-    login_url = f"{settings.web_url}/entrar"
-    reset_url = f"{settings.web_url}/esqueci-a-senha"
-    text = (
-        "Olá!\n\n"
-        "Alguém tentou criar um cadastro no Spillway com este e-mail, que já tem conta.\n"
-        f"Para entrar: {login_url}\n"
-        f"Se esqueceu a senha: {reset_url}\n\n"
-        "Se não foi você, ignore este e-mail.\n"
-    )
-    html = (
-        "<p>Olá!</p>"
-        "<p>Alguém tentou criar um cadastro no Spillway com este e-mail, que já tem conta.</p>"
-        f'<p><a href="{login_url}">Entrar</a> · <a href="{reset_url}">Esqueci a senha</a></p>'
-        "<p>Se não foi você, ignore este e-mail.</p>"
-    )
-    return EmailMessage(to=to, subject="Você já tem conta no Spillway", text=text, html=html)
+def existing_account_email(settings: Settings, to: str, name: str) -> EmailMessage:
+    return template_message(settings, "existing-account", to, {"name": first_name(name)})
 
 
-def reset_email(settings: Settings, to: str, code: str) -> EmailMessage:
+def reset_email(settings: Settings, to: str, name: str, code: str) -> EmailMessage:
     minutes = int(RESET_CODE_TTL.total_seconds() // 60)
-    text = (
-        "Olá!\n\n"
-        "Recebemos um pedido para redefinir a senha do Spillway.\n"
-        f"Seu código para criar uma nova senha é: {code}\n\n"
-        f"Digite esse código na tela de recuperação de senha. Ele vale por {minutes} minutos.\n"
-        "Se não foi você, ignore este e-mail: sua senha continua a mesma.\n"
+    return template_message(
+        settings,
+        "reset-code",
+        to,
+        {"name": first_name(name), "code": code},
+        fixed={"minutes": minutes},
     )
-    html = (
-        "<p>Olá!</p>"
-        "<p>Recebemos um pedido para redefinir a senha do Spillway.</p>"
-        "<p>Seu código para criar uma nova senha é:</p>"
-        f'<p style="font-size:28px;font-weight:700;letter-spacing:6px">{code}</p>'
-        f"<p>Digite esse código na tela de recuperação de senha. "
-        f"Ele vale por {minutes} minutos.</p>"
-        "<p>Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>"
-    )
-    return EmailMessage(
-        to=to, subject=f"Seu código para redefinir a senha: {code}", text=text, html=html
-    )
+
+
+def first_name(name: str) -> str:
+    parts = name.split()
+    return parts[0] if parts else "assinante"
 
 
 @router.post(
@@ -248,7 +217,9 @@ def signup(
     if existing is not None and existing.email_verified_at is not None:
         log_event(session, request, category="auth", action="auth.signup_existing")
         session.commit()
-        background.add_task(send_safely, sender, existing_account_email(settings, email))
+        background.add_task(
+            send_safely, sender, existing_account_email(settings, email, existing.name)
+        )
         return SignupResponse(message=ACCEPTED_MESSAGE)
     if existing is not None:
         _delete_member(session, existing)
@@ -312,7 +283,7 @@ def signup(
     except IntegrityError:
         session.rollback()
         return SignupResponse(message=ACCEPTED_MESSAGE)
-    background.add_task(send_safely, sender, verification_email(settings, email, code))
+    background.add_task(send_safely, sender, verification_email(settings, email, body.name, code))
     return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
 
 
@@ -347,7 +318,9 @@ def resend_verification(
             session, request, category="auth", action="auth.resend_verification", member=member
         )
         session.commit()
-        background.add_task(send_safely, sender, verification_email(settings, email, code))
+        background.add_task(
+            send_safely, sender, verification_email(settings, email, member.name, code)
+        )
         return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
     return SignupResponse(message=ACCEPTED_MESSAGE)
 
@@ -439,7 +412,7 @@ def forgot_password(
             session, request, category="auth", action="auth.password_reset_requested", member=member
         )
         session.commit()
-        background.add_task(send_safely, sender, reset_email(settings, email, code))
+        background.add_task(send_safely, sender, reset_email(settings, email, member.name, code))
         return SignupResponse(message=ACCEPTED_MESSAGE, dev_code=_dev_code(settings, code))
     return SignupResponse(message=ACCEPTED_MESSAGE)
 
