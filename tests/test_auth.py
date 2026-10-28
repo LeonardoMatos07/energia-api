@@ -442,3 +442,36 @@ def test_admin_lists_leads_by_score(
 
     hot = client.get("/v1/admin/leads", params={"tier": "hot"}, headers=admin_headers).json()
     assert [item["email"] for item in hot["items"]] == ["ana@empresa.com.br"]
+
+
+def test_a_member_turns_the_monthly_e_mail_on_and_off_without_a_confirmation(
+    client: TestClient, emails: FakeEmailSender, session: Session
+) -> None:
+    signup_and_verify(client, emails, marketing_opt_in=False)
+    token = login(client).json()["session_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    before = len(emails.sent)
+
+    on = client.put("/v1/auth/me/newsletter", json={"enabled": True}, headers=headers)
+    assert on.status_code == 200
+    assert on.json()["marketing_opt_in"] is True
+    assert client.get("/v1/auth/me", headers=headers).json()["marketing_opt_in"] is True
+    assert len(emails.sent) == before
+
+    again = client.put("/v1/auth/me/newsletter", json={"enabled": True}, headers=headers)
+    assert again.json()["marketing_opt_in"] is True
+
+    off = client.put("/v1/auth/me/newsletter", json={"enabled": False}, headers=headers)
+    assert off.json()["marketing_opt_in"] is False
+    session.expire_all()
+    assert session.scalars(select(Member.marketing_opt_in)).one() is False
+
+
+def test_the_newsletter_preference_needs_a_session_and_a_boolean(
+    client: TestClient, emails: FakeEmailSender
+) -> None:
+    assert client.put("/v1/auth/me/newsletter", json={"enabled": True}).status_code == 401
+    signup_and_verify(client, emails)
+    token = login(client).json()["session_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    assert client.put("/v1/auth/me/newsletter", json={}, headers=headers).status_code == 422

@@ -283,6 +283,10 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class NewsletterPreference(BaseModel):
+    enabled: bool
+
+
 class ConfirmedResponse(BaseModel):
     confirmed: bool
 
@@ -448,6 +452,7 @@ class MemberProfile(_Orm):
     regions: list[str]
     plants: list[str]
     interests: list[str]
+    marketing_opt_in: bool
     created_at: datetime
 
 
@@ -463,7 +468,6 @@ class Lead(MemberProfile):
     phone: str | None
     referral: str | None
     signup_source: str | None
-    marketing_opt_in: bool
     email_verified_at: datetime | None
     lead_score: int
     lead_tier: LeadTier

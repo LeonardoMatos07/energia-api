@@ -24,6 +24,7 @@ from app.schemas import (
     MemberProfile,
     MemberSignup,
     MessageResponse,
+    NewsletterPreference,
     PasswordConfirmation,
     PasswordReset,
     SignupResponse,
@@ -376,6 +377,24 @@ def login(body: MemberLogin, request: Request, session: SessionDep) -> LoginResp
 
 @router.get("/me", response_model=MemberProfile, responses={401: {"description": UNAUTHORIZED}})
 def me(member: CurrentMember) -> MemberProfile:
+    return MemberProfile.model_validate(member)
+
+
+@router.put(
+    "/me/newsletter",
+    response_model=MemberProfile,
+    responses={401: {"description": UNAUTHORIZED}},
+)
+def set_newsletter(
+    body: NewsletterPreference, member: CurrentMember, request: Request, session: SessionDep
+) -> MemberProfile:
+    """Turns the monthly e-mail (report and analyses) on or off for a signed-in member. Their
+    address is already verified, so there is no confirmation e-mail to click."""
+    if member.marketing_opt_in != body.enabled:
+        member.marketing_opt_in = body.enabled
+        action = "auth.newsletter_enabled" if body.enabled else "auth.newsletter_disabled"
+        log_event(session, request, category="auth", action=action, member=member)
+        session.commit()
     return MemberProfile.model_validate(member)
 
 
