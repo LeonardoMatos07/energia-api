@@ -34,6 +34,7 @@ from reportlab.platypus import (
 )
 from reportlab.platypus.flowables import Flowable
 
+from app.exporting.charts import chart_drawing, parse_chart
 from app.exporting.data import SOURCE_LABELS, Analysis, Cell, tables
 from app.exporting.data import Table as DataTable
 
@@ -79,7 +80,7 @@ CODE = ParagraphStyle(
 
 def text(value: object) -> str:
     """Escaped for reportlab's mini-markup, limited to what the built-in font can print."""
-    plain = "" if value is None else str(value)
+    plain = "" if value is None else str(value).replace("\N{MINUS SIGN}", "-")
     return escape(plain.encode("cp1252", errors="replace").decode("cp1252"))
 
 
@@ -492,6 +493,18 @@ class _Blocks:
                 )
             )
             return [box]
+        if kind == "fence" and token.info.strip() == "chart":
+            spec = parse_chart(token.content)
+            if spec is not None:
+                unit = f" ({spec.unit})" if spec.unit else ""
+                return [
+                    KeepTogether(
+                        [
+                            Paragraph(text(f"{spec.title}{unit}"), H3),
+                            chart_drawing(spec, CONTENT_WIDTH),
+                        ]
+                    )
+                ]
         if kind in ("fence", "code_block"):
             return [Paragraph(text(token.content.rstrip()).replace("\n", "<br/>"), CODE)]
         if kind == "hr":

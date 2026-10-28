@@ -7,10 +7,12 @@ not passed through, and the parser itself refuses javascript: and similar links.
 
 import re
 from html import escape
+from typing import Any
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
+from app.exporting.charts import chart_html, chart_text, parse_chart
 from app.exporting.data import Analysis, tables
 from app.exporting.pdf import number
 
@@ -19,6 +21,23 @@ HTML_LIMIT = 150_000
 TOP_ROWS = 5
 
 _markdown = MarkdownIt("commonmark", {"html": False}).enable("table")
+
+
+_renderer: Any = _markdown.renderer
+_default_fence = _renderer.rules["fence"]
+
+
+def _render_fence(tokens: Any, idx: int, options: Any, env: Any) -> str:
+    """A `chart` block becomes bars in table cells; any other code block renders as usual."""
+    token = tokens[idx]
+    if token.info.strip() == "chart":
+        spec = parse_chart(token.content)
+        if spec is not None:
+            return chart_html(spec)
+    return str(_default_fence(tokens, idx, options, env))
+
+
+_renderer.rules["fence"] = _render_fence
 
 _STYLES = {
     "h1": "margin:24px 0 10px 0;font-size:20px;line-height:26px;color:#0e1b2c;",
@@ -88,6 +107,12 @@ def markdown_text(content: str, limit: int = TEXT_LIMIT) -> str:
             if line:
                 paragraphs.append(prefix + line)
             prefix = ""
+        elif token.type == "fence" and token.info.strip() == "chart":
+            spec = parse_chart(token.content)
+            if spec is not None:
+                paragraphs.append(chart_text(spec))
+            elif token.content.strip():
+                paragraphs.append(token.content.strip())
         elif token.type in ("fence", "code_block") and token.content.strip():
             paragraphs.append(token.content.strip())
     out: list[str] = []
