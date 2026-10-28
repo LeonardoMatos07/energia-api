@@ -1673,6 +1673,69 @@
         }
       }
     },
+    "/v1/auth/me/newsletter": {
+      "put": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Set Newsletter",
+        "description": "Turns the monthly e-mail (report and analyses) on or off for a signed-in member. Their\naddress is already verified, so there is no confirmation e-mail to click.",
+        "operationId": "set_newsletter_v1_auth_me_newsletter_put",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsletterPreference"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/logout": {
       "post": {
         "tags": [
@@ -3673,6 +3736,10 @@
             "type": "array",
             "title": "Interests"
           },
+          "marketing_opt_in": {
+            "type": "boolean",
+            "title": "Marketing Opt In"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -3733,10 +3800,6 @@
             ],
             "title": "Signup Source"
           },
-          "marketing_opt_in": {
-            "type": "boolean",
-            "title": "Marketing Opt In"
-          },
           "email_verified_at": {
             "anyOf": [
               {
@@ -3788,13 +3851,13 @@
           "regions",
           "plants",
           "interests",
+          "marketing_opt_in",
           "created_at",
           "company_size",
           "study_level",
           "phone",
           "referral",
           "signup_source",
-          "marketing_opt_in",
           "email_verified_at",
           "lead_score",
           "lead_tier",
@@ -4088,6 +4151,10 @@
             "type": "array",
             "title": "Interests"
           },
+          "marketing_opt_in": {
+            "type": "boolean",
+            "title": "Marketing Opt In"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -4107,6 +4174,7 @@
           "regions",
           "plants",
           "interests",
+          "marketing_opt_in",
           "created_at"
         ],
         "title": "MemberProfile"
@@ -4396,6 +4464,19 @@
           "months"
         ],
         "title": "MonthsResponse"
+      },
+      "NewsletterPreference": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "NewsletterPreference"
       },
       "NewsletterSignup": {
         "properties": {
