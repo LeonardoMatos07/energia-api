@@ -110,18 +110,6 @@ SPECS: dict[str, _Spec] = {
         ),
         footer=FOOTER_ACCOUNT,
     ),
-    "existing-account": _Spec(
-        subject="Você já tem conta no Spillway",
-        preheader="Alguém tentou criar um cadastro com o seu e-mail.",
-        text=(
-            "Olá, {{name}}!\n\n"
-            "Alguém tentou criar um cadastro no Spillway com este e-mail, que já tem conta.\n"
-            "Para entrar: [[login_url]]\n"
-            "Se esqueceu a senha: [[reset_url]]\n\n"
-            "Se não foi você, ignore este e-mail.\n"
-        ),
-        footer=FOOTER_ACCOUNT,
-    ),
     "newsletter-confirmation": _Spec(
         subject="Confirme sua inscrição na newsletter do Spillway",
         preheader="Falta só um clique para receber os relatórios mensais.",
@@ -197,8 +185,6 @@ def build(
     spec = SPECS[name]
     values: dict[str, str] = {
         "web_url": web_url,
-        "login_url": f"{web_url}/entrar",
-        "reset_url": f"{web_url}/esqueci-a-senha",
         "account_url": f"{web_url}/conta",
         "analysis_url": f"{web_url}/analises",
         **{key: str(value) for key, value in fixed.items()},

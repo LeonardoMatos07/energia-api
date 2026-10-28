@@ -197,15 +197,15 @@ def test_wrong_credentials_do_not_reveal_whether_the_account_exists(
     assert wrong.json() == unknown.json()
 
 
-def test_signup_for_an_existing_account_creates_nothing_new(
+def test_signup_for_an_existing_account_says_so_and_sends_nothing(
     client: TestClient, emails: FakeEmailSender, session: Session
 ) -> None:
     signup_and_verify(client, emails)
     before = len(emails.sent)
     again = client.post("/v1/auth/signup", json=payload(name="Someone Else"))
-    assert again.status_code == 202
-    assert len(emails.sent) == before + 1
-    assert "já tem conta" in emails.sent[-1].text
+    assert again.status_code == 409
+    assert again.json() == {"detail": "An account with this e-mail already exists."}
+    assert len(emails.sent) == before
     assert session.scalar(select(func.count()).select_from(Member)) == 1
     assert session.scalars(select(Member.name)).one() == "Ana Souza"
 
