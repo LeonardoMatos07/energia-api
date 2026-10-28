@@ -618,3 +618,45 @@ class MemberTimeline(BaseModel):
 class PurgeResponse(BaseModel):
     deleted: int
     older_than_days: int
+
+
+class ForecastPoint(BaseModel):
+    ts: str = Field(description="Hour start, Brasilia local time (no offset)")
+    risk_probability: float = Field(ge=0, le=1)
+    expected_curtailment_pct: float
+    level: Literal["baixo", "medio", "alto"]
+    applicable: bool = Field(
+        description="False for hours without expected generation (solar night)"
+    )
+
+
+class ForecastResponse(BaseModel):
+    scope: str
+    source: Source
+    risk_definition: str
+    origin_ts: str
+    generated_at: datetime
+    data_through: date
+    stale_days: int
+    model_version: str
+    model_trained_at: datetime
+    points: list[ForecastPoint]
+
+
+class ForecastScope(BaseModel):
+    scope: str
+    source: Source
+
+
+class ForecastModelResponse(BaseModel):
+    model_version: str
+    trained_at: datetime
+    data_period: dict[str, Any]
+    n_series: int
+    n_rows: int
+    metrics: dict[str, Any]
+    calibration: dict[str, Any]
+    feature_importance: dict[str, Any]
+    model_card: dict[str, Any]
+    last_run_at: datetime | None
+    last_data_through: date | None

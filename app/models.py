@@ -368,6 +368,79 @@ Index("ix_member_token_member_id", MemberToken.member_id)
 Index("ix_member_session_member_id", MemberSession.member_id)
 
 
+class ForecastModel(Base):
+    """Metadata and training results of a registered forecast model (written by the ML job)."""
+
+    __tablename__ = "forecast_model"
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    mlflow_run_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    model_version: Mapped[str] = mapped_column(Text, nullable=False)
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    data_period: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False)
+    n_series: Mapped[int] = mapped_column(Integer, nullable=False)
+    n_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False)
+    calibration: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False)
+    feature_importance: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False)
+    model_card: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False)
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    created_at: Mapped[datetime] = _now_default()
+
+
+Index(
+    "uq_forecast_model_current",
+    ForecastModel.is_current,
+    unique=True,
+    postgresql_where=ForecastModel.is_current,
+    sqlite_where=ForecastModel.is_current,
+)
+
+
+class ForecastRun(Base):
+    """One scoring batch. Readers only see runs in status ``ready`` (complete)."""
+
+    __tablename__ = "forecast_run"
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    model_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("forecast_model.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = _now_default()
+    origin_ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    data_through: Mapped[date] = mapped_column(Date, nullable=False)
+    horizon_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('loading', 'ready')", name="status"),
+        UniqueConstraint("model_id", "origin_ts", name="uq_forecast_run_model_origin"),
+    )
+
+
+class ForecastHourly(Base):
+    """Hourly risk per series. ``hour_ts`` is Brasilia local time (naive), like the lake."""
+
+    __tablename__ = "forecast_hourly"
+
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("forecast_run.id", ondelete="CASCADE"), primary_key=True
+    )
+    source: Mapped[str] = mapped_column(Text, primary_key=True)
+    scope: Mapped[str] = mapped_column(Text, primary_key=True)
+    hour_ts: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    risk_probability: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    expected_curtailment_pct: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    applicable: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("source IN ('wind', 'solar')", name="source"),
+        CheckConstraint("risk_probability BETWEEN 0 AND 1", name="risk_range"),
+    )
+
+
 for _name in (
     "plant_monthly_curtailment",
     "state_monthly_curtailment",

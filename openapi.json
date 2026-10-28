@@ -1309,6 +1309,131 @@
         }
       }
     },
+    "/v1/forecast": {
+      "get": {
+        "tags": [
+          "forecast"
+        ],
+        "summary": "Forecast",
+        "operationId": "forecast_v1_forecast_get",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3,
+              "examples": [
+                "NE"
+              ],
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar"
+              ],
+              "type": "string",
+              "default": "wind",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 7,
+              "minimum": 1,
+              "default": 7,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nothing published for this scope and source"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/forecast/scopes": {
+      "get": {
+        "tags": [
+          "forecast"
+        ],
+        "summary": "Forecast Scopes",
+        "operationId": "forecast_scopes_v1_forecast_scopes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ForecastScope"
+                  },
+                  "type": "array",
+                  "title": "Response Forecast Scopes V1 Forecast Scopes Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/forecast/model": {
+      "get": {
+        "tags": [
+          "forecast"
+        ],
+        "summary": "Forecast Model",
+        "operationId": "forecast_model_v1_forecast_model_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastModelResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No model published yet"
+          }
+        }
+      }
+    },
     "/v1/newsletter": {
       "post": {
         "tags": [
@@ -3414,6 +3539,223 @@
           "accepted"
         ],
         "title": "EventsAccepted"
+      },
+      "ForecastModelResponse": {
+        "properties": {
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "trained_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Trained At"
+          },
+          "data_period": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data Period"
+          },
+          "n_series": {
+            "type": "integer",
+            "title": "N Series"
+          },
+          "n_rows": {
+            "type": "integer",
+            "title": "N Rows"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "calibration": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Calibration"
+          },
+          "feature_importance": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Feature Importance"
+          },
+          "model_card": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Model Card"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "last_data_through": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Data Through"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_version",
+          "trained_at",
+          "data_period",
+          "n_series",
+          "n_rows",
+          "metrics",
+          "calibration",
+          "feature_importance",
+          "model_card",
+          "last_run_at",
+          "last_data_through"
+        ],
+        "title": "ForecastModelResponse"
+      },
+      "ForecastPoint": {
+        "properties": {
+          "ts": {
+            "type": "string",
+            "title": "Ts",
+            "description": "Hour start, Brasilia local time (no offset)"
+          },
+          "risk_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Risk Probability"
+          },
+          "expected_curtailment_pct": {
+            "type": "number",
+            "title": "Expected Curtailment Pct"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "baixo",
+              "medio",
+              "alto"
+            ],
+            "title": "Level"
+          },
+          "applicable": {
+            "type": "boolean",
+            "title": "Applicable",
+            "description": "False for hours without expected generation (solar night)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "risk_probability",
+          "expected_curtailment_pct",
+          "level",
+          "applicable"
+        ],
+        "title": "ForecastPoint"
+      },
+      "ForecastResponse": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar"
+            ],
+            "title": "Source"
+          },
+          "risk_definition": {
+            "type": "string",
+            "title": "Risk Definition"
+          },
+          "origin_ts": {
+            "type": "string",
+            "title": "Origin Ts"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "data_through": {
+            "type": "string",
+            "format": "date",
+            "title": "Data Through"
+          },
+          "stale_days": {
+            "type": "integer",
+            "title": "Stale Days"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "model_trained_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Model Trained At"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ForecastPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "source",
+          "risk_definition",
+          "origin_ts",
+          "generated_at",
+          "data_through",
+          "stale_days",
+          "model_version",
+          "model_trained_at",
+          "points"
+        ],
+        "title": "ForecastResponse"
+      },
+      "ForecastScope": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar"
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "source"
+        ],
+        "title": "ForecastScope"
       },
       "FunnelStep": {
         "properties": {
