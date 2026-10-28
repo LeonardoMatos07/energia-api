@@ -11,6 +11,7 @@ the decision and its consequences, including the trade-offs accepted.
 | [0004](0004-event-driven-cache-revalidation.md) | Event-driven cache revalidation from the pipeline to the portal | data, api, web |
 | [0005](0005-no-nat-gateway.md) | No NAT gateway: public subnets with no inbound access, private database | infra |
 | [0006](0006-keyless-deploys-with-github-oidc.md) | Keyless deploys with GitHub OIDC and gated production environments | all |
+| [0007](0007-forecast-published-through-the-warehouse.md) | The curtailment forecast is published through the warehouse, not called over HTTP | forecast, api, web, infra |
 
 New records use the next number and the same sections (Status, Scope, Context, Decision,
 Consequences). A superseded record stays in place with its status changed and a link to the

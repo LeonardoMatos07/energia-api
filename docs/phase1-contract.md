@@ -76,6 +76,10 @@ One row per plant or cluster and month. For clusters the figures are the officia
 
 PK `(plant_id, month)`. Indexes: `(month, national_rank)`, `(month, state_rank)`.
 
+### Forecast tables (ADR 0007)
+
+`spillway-forecast` (`spillway publish`, role `energia_forecast`) writes `forecast_model`, `forecast_run` and `forecast_hourly` in one transaction; the API only reads the latest run with `status = 'ready'`. Routes: `GET /v1/forecast?scope=&source=&days=`, `GET /v1/forecast/scopes`, `GET /v1/forecast/model` (public, short cache, `404` until something is published).
+
 ### `state_monthly_curtailment`
 | Column | Type |
 |---|---|
