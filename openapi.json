@@ -3689,6 +3689,16 @@
             "type": "string",
             "title": "Origin Ts"
           },
+          "valid_from": {
+            "type": "string",
+            "title": "Valid From",
+            "description": "First hour returned (Brasilia time)"
+          },
+          "valid_to": {
+            "type": "string",
+            "title": "Valid To",
+            "description": "Last hour returned (Brasilia time)"
+          },
           "generated_at": {
             "type": "string",
             "format": "date-time",
@@ -3697,7 +3707,8 @@
           "data_through": {
             "type": "string",
             "format": "date",
-            "title": "Data Through"
+            "title": "Data Through",
+            "description": "Last day of ONS data behind this forecast"
           },
           "stale_days": {
             "type": "integer",
@@ -3726,6 +3737,8 @@
           "source",
           "risk_definition",
           "origin_ts",
+          "valid_from",
+          "valid_to",
           "generated_at",
           "data_through",
           "stale_days",
@@ -5700,7 +5713,8 @@
               "enum": [
                 "curtailment",
                 "plants",
-                "reports"
+                "reports",
+                "forecast"
               ]
             },
             "type": "array",
@@ -5718,7 +5732,8 @@
               "enum": [
                 "curtailment",
                 "plants",
-                "reports"
+                "reports",
+                "forecast"
               ]
             },
             "type": "array",

@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,16 @@ from app.models import ForecastHourly, ForecastModel, ForecastRun
 from app.routers.forecast import FORECAST_CACHE_CONTROL, risk_level
 
 ORIGIN = datetime(2026, 10, 1)  # noqa: DTZ001 - naive local time on purpose
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The forecast serves hours from now on; by default 'now' is the start of the run."""
+    monkeypatch.setattr("app.routers.forecast.local_now", lambda: ORIGIN)
+
+
+def set_now(monkeypatch: pytest.MonkeyPatch, now: datetime) -> None:
+    monkeypatch.setattr("app.routers.forecast.local_now", lambda: now)
 
 
 def add_model(session: Session, current: bool = True) -> ForecastModel:
@@ -115,3 +126,34 @@ def test_risk_level_bands() -> None:
         "alto",
         "alto",
     ]
+
+
+def test_only_hours_from_now_on_are_returned(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add_run(session, add_model(session))
+    set_now(monkeypatch, ORIGIN + timedelta(days=1, hours=6))
+    body = client.get("/v1/forecast", params={"scope": "NE", "days": 7}).json()
+    assert body["valid_from"] == "2026-10-02T06:00:00"
+    assert body["valid_to"] == "2026-10-07T23:00:00"
+    assert len(body["points"]) == 168 - 30
+    assert body["origin_ts"] == "2026-10-01T00:00:00" and body["data_through"] == "2026-09-30"
+
+
+def test_days_limits_the_window_after_now(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add_run(session, add_model(session))
+    set_now(monkeypatch, ORIGIN + timedelta(days=2))
+    body = client.get("/v1/forecast", params={"scope": "NE", "days": 3}).json()
+    assert len(body["points"]) == 72
+    assert body["valid_from"] == "2026-10-03T00:00:00"
+    assert body["valid_to"] == "2026-10-05T23:00:00"
+
+
+def test_expired_run_is_not_served_as_if_it_were_current(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add_run(session, add_model(session))
+    set_now(monkeypatch, ORIGIN + timedelta(days=8))
+    assert client.get("/v1/forecast", params={"scope": "NE"}).status_code == 404

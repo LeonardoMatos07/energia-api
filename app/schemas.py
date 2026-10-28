@@ -21,8 +21,8 @@ Source = Literal["wind", "solar"]
 AggregateSource = Literal["wind", "solar", "total"]
 Kind = Literal["plant", "cluster"]
 SubsystemOrSin = Literal["N", "NE", "S", "SE", "SIN"]
-RevalidateTag = Literal["curtailment", "plants", "reports"]
-ALL_TAGS: list[RevalidateTag] = ["curtailment", "plants", "reports"]
+RevalidateTag = Literal["curtailment", "plants", "reports", "forecast"]
+ALL_TAGS: list[RevalidateTag] = ["curtailment", "plants", "reports", "forecast"]
 
 
 def parse_month(value: Any) -> date:
@@ -635,8 +635,10 @@ class ForecastResponse(BaseModel):
     source: Source
     risk_definition: str
     origin_ts: str
+    valid_from: str = Field(description="First hour returned (Brasilia time)")
+    valid_to: str = Field(description="Last hour returned (Brasilia time)")
     generated_at: datetime
-    data_through: date
+    data_through: date = Field(description="Last day of ONS data behind this forecast")
     stale_days: int
     model_version: str
     model_trained_at: datetime
