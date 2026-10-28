@@ -6,6 +6,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.auth import JwksCache
 from app.cache import TTLCache
@@ -48,6 +50,22 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
     return JSONResponse(status_code=500, content={"detail": "Internal error."})
 
 
+class SelectiveGZipMiddleware(GZipMiddleware):
+    """Compress JSON responses; skip exports and PDFs, which are already compressed."""
+
+    def __init__(self, app: ASGIApp, minimum_size: int = 1024) -> None:
+        super().__init__(app, minimum_size=minimum_size)
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            path: str = scope["path"]
+            if path.startswith("/v1/exports") or path.endswith("/pdf"):
+                await self._app(scope, receive, send)
+                return
+        await super().__call__(scope, receive, send)
+
+
 def create_app(
     settings: Settings | None = None,
     engine: Engine | None = None,
@@ -82,6 +100,7 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["Authorization", "Content-Type"],
     )
+    app.add_middleware(SelectiveGZipMiddleware)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
 

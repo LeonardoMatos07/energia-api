@@ -286,3 +286,15 @@ def test_summary_rejects_unknown_scope_and_reversed_period(client: TestClient) -
     assert client.get("/v1/curtailment/summary", params={"scope": "XX"}).status_code == 404
     reversed_period = {"start": "2026-09", "end": "2026-07"}
     assert client.get("/v1/curtailment/summary", params=reversed_period).status_code == 422
+
+
+def test_large_json_is_gzipped_when_requested(client: TestClient) -> None:
+    response = client.get("/v1/curtailment/subsystems", headers={"Accept-Encoding": "gzip"})
+    assert response.status_code == 200
+    assert response.headers.get("content-encoding") == "gzip"
+    assert response.json()["items"]
+
+
+def test_small_json_is_not_gzipped(client: TestClient) -> None:
+    response = client.get("/health", headers={"Accept-Encoding": "gzip"})
+    assert "content-encoding" not in response.headers
