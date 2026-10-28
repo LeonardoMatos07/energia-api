@@ -18,6 +18,7 @@ from app.routers import (
     auth,
     curtailment,
     events,
+    exports,
     health,
     newsletter,
     plants,
@@ -67,6 +68,7 @@ def create_app(
     app.state.cache = TTLCache(settings.CACHE_TTL_SECONDS)
     app.state.newsletter_limiter = RateLimiter(settings.NEWSLETTER_RATE_LIMIT_PER_MINUTE, 60.0)
     app.state.auth_limiter = RateLimiter(settings.AUTH_RATE_LIMIT_PER_MINUTE, 60.0)
+    app.state.export_limiter = RateLimiter(settings.EXPORT_RATE_LIMIT_PER_MINUTE, 60.0)
     app.state.email_sender = email_sender or make_email_sender(settings)
     app.state.jwks = JwksCache(settings.cognito_jwks_url)
     app.state.web_transport = web_transport
@@ -88,6 +90,7 @@ def create_app(
         plants,
         rankings,
         reports,
+        exports,
         newsletter,
         auth,
         events,

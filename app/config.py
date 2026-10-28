@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     CACHE_TTL_SECONDS: float = Field(default=300.0, ge=0)
     NEWSLETTER_RATE_LIMIT_PER_MINUTE: int = Field(default=5, ge=1)
     AUTH_RATE_LIMIT_PER_MINUTE: int = Field(default=10, ge=1)
+    EXPORT_RATE_LIMIT_PER_MINUTE: int = Field(default=20, ge=1)
     TRUST_X_FORWARDED_FOR: bool = False
     WEB_API_SECRET: str = ""
     EVENT_HASH_SECRET: str = ""
