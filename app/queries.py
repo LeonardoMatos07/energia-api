@@ -151,29 +151,41 @@ def grouped_ranking(
 ) -> list[RankedGroup]:
     column = RANKING_COLUMNS[group]
     metrics = PlantMonthlyCurtailment
+    # Aggregate per plant first (a few thousand rows), then per group. Counting
+    # DISTINCT plants over the joined plant-month rows forced a large sort that spilled to disk.
+    per_plant_stmt = select(
+        metrics.plant_id.label("plant_id"),
+        func.sum(metrics.verified_generation_mwh).label("verified"),
+        func.sum(metrics.curtailed_mwh).label("curtailed"),
+        func.sum(metrics.estimated_loss_brl).label("loss"),
+        func.sum(metrics.curtailed_rel_mwh + metrics.curtailed_cnf_mwh).label("compensable"),
+        func.max(metrics.curtailed_mwh).label("peak"),
+    ).group_by(metrics.plant_id)
+    if start is not None:
+        per_plant_stmt = per_plant_stmt.where(metrics.month >= start)
+    if end is not None:
+        per_plant_stmt = per_plant_stmt.where(metrics.month <= end)
+    per_plant = per_plant_stmt.subquery()
+
     stmt = (
         select(
             column,
             func.min(Plant.state),
-            func.count(func.distinct(Plant.id)),
-            func.count(func.distinct(Plant.id)).filter(metrics.curtailed_mwh > 0),
-            func.sum(metrics.verified_generation_mwh),
-            func.sum(metrics.curtailed_mwh),
-            func.sum(metrics.estimated_loss_brl),
-            func.sum(metrics.curtailed_rel_mwh + metrics.curtailed_cnf_mwh),
+            func.count(Plant.id),
+            func.count(Plant.id).filter(per_plant.c.peak > 0),
+            func.sum(per_plant.c.verified),
+            func.sum(per_plant.c.curtailed),
+            func.sum(per_plant.c.loss),
+            func.sum(per_plant.c.compensable),
         )
-        .join(metrics, metrics.plant_id == Plant.id)
+        .join(per_plant, per_plant.c.plant_id == Plant.id)
         .where(Plant.kind == "plant", column.is_not(None))
         .group_by(column)
-        .order_by(func.sum(metrics.curtailed_mwh).desc(), column)
+        .order_by(func.sum(per_plant.c.curtailed).desc(), column)
         .limit(limit)
     )
     if source != "total":
         stmt = stmt.where(Plant.source == source)
-    if start is not None:
-        stmt = stmt.where(metrics.month >= start)
-    if end is not None:
-        stmt = stmt.where(metrics.month <= end)
 
     items = []
     for rank, row in enumerate(session.execute(stmt), start=1):
