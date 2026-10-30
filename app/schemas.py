@@ -662,3 +662,63 @@ class ForecastModelResponse(BaseModel):
     model_card: dict[str, Any]
     last_run_at: datetime | None
     last_data_through: date | None
+
+
+GenerationSource = Literal["hydro", "thermal", "wind", "solar"]
+Subsystem = Literal["N", "NE", "S", "SE"]
+
+
+class BalancePoint(_Orm):
+    hour: datetime
+    hour_utc: datetime
+    subsystem: Subsystem
+    hydro_mw_avg: float | None
+    thermal_mw_avg: float | None
+    wind_mw_avg: float | None
+    solar_mw_avg: float | None
+    load_mw_avg: float | None
+    net_interchange_mw_avg: float | None
+
+
+class BalanceResponse(BaseModel):
+    date_from: date
+    date_to: date
+    points: list[BalancePoint]
+
+
+class MonthlyGenerationPoint(_Orm):
+    month: Month
+    subsystem: SubsystemOrSin
+    source: GenerationSource
+    energy_mwh: float
+    avg_mw: float
+    peak_mw: float
+    share_pct: float | None
+
+
+class MonthlyGenerationResponse(BaseModel):
+    points: list[MonthlyGenerationPoint]
+
+
+class PowerPlantInfo(_Orm):
+    id: str
+    name: str
+    slug: str
+    source_type: str
+    fuel_type: str | None
+    state: str | None
+    subsystem: str | None
+    capacity_mw: float | None
+
+
+class PlantGenerationPoint(_Orm):
+    month: Month
+    energy_mwh: float
+    avg_mw: float
+    peak_mw: float
+    capacity_factor: float | None
+
+
+class PlantGenerationResponse(BaseModel):
+    plant: PowerPlantInfo
+    points: list[PlantGenerationPoint]

@@ -27,6 +27,7 @@ from app.routers import (
     plants,
     rankings,
     reports,
+    system,
 )
 
 logger = logging.getLogger("app")
@@ -112,6 +113,7 @@ def create_app(
         reports,
         exports,
         forecast,
+        system,
         newsletter,
         auth,
         events,
