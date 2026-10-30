@@ -773,3 +773,93 @@ class ThermalDispatchPoint(BaseModel):
 
 class ThermalDispatchResponse(BaseModel):
     points: list[ThermalDispatchPoint]
+
+
+class SubsystemStoragePoint(_Orm):
+    day: date
+    subsystem: Subsystem
+    storage_max_mw_month: float | None
+    storage_mw_month: float | None
+    storage_pct: float | None
+    ena_gross_mw_avg: float | None
+    ena_gross_pct_mlt: float | None
+    ena_storable_mw_avg: float | None
+    ena_storable_pct_mlt: float | None
+
+
+class SubsystemStorageResponse(BaseModel):
+    date_from: date
+    date_to: date
+    points: list[SubsystemStoragePoint]
+
+
+class ReservoirInfo(_Orm):
+    id: str
+    name: str
+    slug: str
+    reservoir_type: str | None
+    plant_name: str | None
+    ceg: str | None
+    subsystem: str | None
+    ree: str | None
+    basin: str | None
+    river: str | None
+    commissioned_on: date | None
+    useful_volume_hm3: float | None
+    max_level_m: float | None
+    min_level_m: float | None
+    latitude: float | None
+    longitude: float | None
+
+
+class ReservoirSummary(ReservoirInfo):
+    latest_day: date | None
+    storage_pct: float | None
+    ena_storable_pct_mlt: float | None
+
+
+class ReservoirListResponse(BaseModel):
+    latest_day: date | None
+    items: list[ReservoirSummary]
+
+
+class ReservoirDailyPoint(_Orm):
+    day: date
+    storage_mw_month: float | None
+    storage_max_mw_month: float | None
+    storage_pct: float | None
+    useful_volume_pct: float | None
+    ena_gross_mw_avg: float | None
+    ena_gross_pct_mlt: float | None
+    ena_storable_mw_avg: float | None
+    ena_storable_pct_mlt: float | None
+    inflow_m3s: float | None
+    natural_inflow_m3s: float | None
+    outflow_m3s: float | None
+    turbined_m3s: float | None
+    spilled_m3s: float | None
+    upstream_level_m: float | None
+    downstream_level_m: float | None
+
+
+class ReservoirDetailResponse(BaseModel):
+    date_from: date
+    date_to: date
+    reservoir: ReservoirInfo
+    points: list[ReservoirDailyPoint]
+
+
+class SpilledEnergyPoint(_Orm):
+    month: Month
+    plant_code: str
+    plant_name: str
+    subsystem: str | None
+    basin: str | None
+    river: str | None
+    agent: str | None
+    spilled_energy_mwh: float
+    spilled_turbinable_energy_mwh: float
+
+
+class SpilledEnergyResponse(BaseModel):
+    points: list[SpilledEnergyPoint]

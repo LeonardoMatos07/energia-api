@@ -441,6 +441,97 @@ class ThermalDispatchMonthly(Base):
     programmed_mwh: Mapped[Decimal | None] = mapped_column(Numeric(16, 3))
 
 
+class Reservoir(Base):
+    """Reservoir register (ONS ``reservatorio``); ``id`` is the ONS res_id."""
+
+    __tablename__ = "reservoir"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    reservoir_type: Mapped[str | None] = mapped_column(Text)
+    planning_code: Mapped[int | None] = mapped_column(Integer)
+    station_code: Mapped[int | None] = mapped_column(Integer)
+    plant_name: Mapped[str | None] = mapped_column(Text)
+    ceg: Mapped[str | None] = mapped_column(Text)
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    ree: Mapped[str | None] = mapped_column(Text)
+    basin: Mapped[str | None] = mapped_column(Text)
+    river: Mapped[str | None] = mapped_column(Text)
+    commissioned_on: Mapped[date | None] = mapped_column(Date)
+    max_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    min_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    max_volume_hm3: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    min_volume_hm3: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    useful_volume_hm3: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    updated_at: Mapped[datetime] = _now_default()
+
+
+class SubsystemStorageDaily(Base):
+    """Daily stored energy (EAR, MW-month) and natural inflow energy (ENA, average MW)."""
+
+    __tablename__ = "subsystem_storage_daily"
+    __table_args__ = (
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),
+        CheckConstraint("storage_pct IS NULL OR storage_pct BETWEEN 0 AND 100", name="storage_pct"),
+    )
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    storage_max_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    ena_gross_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_gross_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    ena_storable_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_storable_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+
+
+class ReservoirDaily(Base):
+    __tablename__ = "reservoir_daily"
+    __table_args__ = (
+        # above 100 while a reservoir spills over its nominal maximum (the ONS shows up to ~170)
+        CheckConstraint("storage_pct IS NULL OR storage_pct BETWEEN 0 AND 200", name="storage_pct"),
+        Index("ix_reservoir_daily_reservoir_id_day", "reservoir_id", "day"),
+    )
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    reservoir_id: Mapped[str] = mapped_column(Text, ForeignKey("reservoir.id"), primary_key=True)
+    storage_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_max_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    useful_volume_pct: Mapped[Decimal | None] = mapped_column(Numeric(8, 3))
+    ena_gross_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_gross_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    ena_storable_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_storable_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    inflow_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    natural_inflow_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    outflow_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    turbined_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    spilled_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    upstream_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    downstream_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+
+
+class PlantMonthlySpilledEnergy(Base):
+    """Energy that was spilled although it could have been turbined (ONS energia vertida)."""
+
+    __tablename__ = "plant_monthly_spilled_energy"
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    plant_code: Mapped[str] = mapped_column(Text, primary_key=True)  # cod_usina (optimisation code)
+    plant_name: Mapped[str] = mapped_column(Text, nullable=False)
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    basin: Mapped[str | None] = mapped_column(Text)
+    river: Mapped[str | None] = mapped_column(Text)
+    agent: Mapped[str | None] = mapped_column(Text)
+    spilled_energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    spilled_turbinable_energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+
+
 class Member(Base):
     __tablename__ = "member"
     __table_args__ = (
@@ -591,6 +682,7 @@ for _name in (
     "plant_monthly_generation",
     "interchange_monthly",
     "thermal_dispatch_monthly",
+    "plant_monthly_spilled_energy",
 ):
     _table = Base.metadata.tables[_name]
     _table.append_constraint(

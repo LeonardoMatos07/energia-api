@@ -189,6 +189,25 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
   (merit order contains its above-inflexibility part; inflexibility is split in two), so only
   read them one at a time or against `total`.
 
+### Hydrology tables (migration 0010)
+Energy stored in reservoirs (EAR) is in **MW-month** (`_mw_month`), natural inflow energy (ENA) in
+average MW (`_mw_avg`) and as a percentage of the long-term average (`_pct_mlt`); flows are in
+m3/s (`_m3s`) and levels in metres (`_m`).
+- `reservoir`: the register (`id` PK = ONS `res_id`, `name`, `slug` unique, `reservoir_type`,
+  `planning_code`, `station_code`, `plant_name`, `ceg`, `subsystem`, `ree`, `basin`, `river`,
+  `commissioned_on`, levels, volumes in hm3, `latitude`, `longitude`). Snapshot, upserted by `id`.
+- `subsystem_storage_daily`: PK `(day, subsystem)`; `storage_max_mw_month`, `storage_mw_month`,
+  `storage_pct` (0 to 100), `ena_gross_*`, `ena_storable_*`.
+- `reservoir_daily`: PK `(day, reservoir_id)`, FK `reservoir.id`; the same storage and ENA columns
+  (`storage_pct` is 0 to 200: a reservoir that spills is above its nominal maximum)
+  per reservoir plus `useful_volume_pct`, `inflow_m3s`, `natural_inflow_m3s`, `outflow_m3s`,
+  `turbined_m3s`, `spilled_m3s`, `upstream_level_m`, `downstream_level_m`. The ONS uses three
+  reservoir codes: EAR and ENA use the planning code (`cod_resplanejamento`), the hydrological
+  data use `id_reservatorio` (= `res_id`); the register maps one to the other.
+- `plant_monthly_spilled_energy`: PK `(month, plant_code)` (`plant_code` is the ONS optimisation
+  code `cod_usina`), `plant_name`, `subsystem`, `basin`, `river`, `agent`, `spilled_energy_mwh`,
+  `spilled_turbinable_energy_mwh`. It does not join `power_plant` (different codes).
+
 ### How `spillway-data` writes
 - `plant`: upsert by `id`.
 - `*_monthly_curtailment`: for each processed month, deletes the rows of that `month` and
@@ -198,6 +217,8 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
   delete-and-insert by `month`. `subsystem_hourly_balance`: delete-and-insert by `hour` range.
 - `interchange_hourly`: delete-and-insert by `hour` range; `interchange_monthly` and
   `thermal_dispatch_monthly`: by `month`.
+- `reservoir`: upsert by `id`. `subsystem_storage_daily` and `reservoir_daily`: delete-and-insert
+  by `day` range of the processed month; `plant_monthly_spilled_energy`: by `month`.
 - Its own database user, with `SELECT, INSERT, UPDATE, DELETE` on these tables only.
 
 ## Data lake (S3)
@@ -225,6 +246,10 @@ out as `YYYY-MM`.
 | GET | `/v1/system/interchange?origin=&destination=&scope=&from=&to=` | Public | `{"points": [interchange_monthly row]}`; `from`/`to` as `YYYY-MM`, default the last 12 months |
 | GET | `/v1/system/interchange/hourly?origin=&destination=&from=&to=` | Public | `{"date_from", "date_to", "points": [interchange_hourly row]}`, at most 31 days |
 | GET | `/v1/system/thermal-dispatch?subsystem=&reason=&plant=&from=&to=` | Public | `{"points": [...]}` summed per month, subsystem and reason (`plants` = how many plants), or per plant when `plant` (a `plant_code`) is given |
+| GET | `/v1/hydro/subsystems?subsystem=&from=&to=` | Public | `{"date_from", "date_to", "points": [subsystem_storage_daily row]}`; days as `YYYY-MM-DD`, default the last 90 days of data, at most 366 |
+| GET | `/v1/hydro/reservoirs?subsystem=&basin=` | Public | `{"latest_day", "items": [reservoir + storage_pct and ena_storable_pct_mlt of the latest day]}` |
+| GET | `/v1/hydro/reservoirs/{slug}?from=&to=` | Public | `{"reservoir", "points": [reservoir_daily row]}`; 404 for an unknown slug |
+| GET | `/v1/hydro/spilled-energy?subsystem=&plant=&month=&limit=` | Public | `{"points": [plant_monthly_spilled_energy row]}` of one month (default the latest), largest turbinable energy first |
 | GET | `/v1/plants/{slug}/generation?from=&to=` | Public | `{"plant": power_plant, "points": [plant_monthly_generation row]}`; 404 for an unknown slug |
 | GET | `/v1/plants?search=&state=&source=&kind=&page=1&page_size=20` | Public | `{"items": [PlantSummary], "total": n, "page": p, "page_size": s}`; `page` ≥ 1, `page_size` from 1 to 100 |
 | GET | `/v1/plants/{slug}` | Public | `{"plant": Plant, "cluster": PlantSummary|null, "cluster_plants": [PlantSummary], "series": [plant_monthly_curtailment rows]}` |
