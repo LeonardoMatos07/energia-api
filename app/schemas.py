@@ -21,8 +21,8 @@ Source = Literal["wind", "solar"]
 AggregateSource = Literal["wind", "solar", "total"]
 Kind = Literal["plant", "cluster"]
 SubsystemOrSin = Literal["N", "NE", "S", "SE", "SIN"]
-RevalidateTag = Literal["curtailment", "plants", "reports", "forecast"]
-ALL_TAGS: list[RevalidateTag] = ["curtailment", "plants", "reports", "forecast"]
+RevalidateTag = Literal["curtailment", "plants", "reports", "forecast", "news"]
+ALL_TAGS: list[RevalidateTag] = ["curtailment", "plants", "reports", "forecast", "news"]
 
 
 def parse_month(value: Any) -> date:
@@ -773,3 +773,111 @@ class ThermalDispatchPoint(BaseModel):
 
 class ThermalDispatchResponse(BaseModel):
     points: list[ThermalDispatchPoint]
+
+
+NewsStatus = Literal["published", "hidden", "removed_on_request"]
+
+
+class NewsSource(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    publisher_name: str
+    homepage_url: str
+    fetch_method: str
+    license_code: str
+    license_url: str
+    license_verified_at: datetime | None
+    license_evidence_url: str | None
+    active: bool
+
+
+class NewsSourceListResponse(BaseModel):
+    items: list[NewsSource]
+
+
+class RelatedLink(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+    href: str = Field(min_length=1, max_length=300, pattern=r"^(/|https://)")
+
+
+class NewsItem(BaseModel):
+    """A news item exactly as the source published it, with everything needed to cite it."""
+
+    id: int
+    source: str
+    publisher_name: str
+    license_code: str
+    license_url: str
+    url: str
+    title: str
+    summary: str | None
+    published_at: datetime
+    source_updated_at: datetime | None
+    topics: list[str]
+    has_editor_note: bool
+
+
+class NewsItemDetail(NewsItem):
+    editor_note: str | None
+    editor_note_by: str | None
+    editor_note_at: datetime | None
+    related_links: list[RelatedLink]
+
+
+class NewsListResponse(BaseModel):
+    items: list[NewsItem]
+    next_cursor: str | None
+
+
+class AdminNewsItem(NewsItemDetail):
+    status: NewsStatus
+
+
+class AdminNewsList(BaseModel):
+    items: list[AdminNewsItem]
+    next_cursor: str | None
+
+
+class NewsPatch(BaseModel):
+    """Moderation: hide an item, write the editor note (by a person), link Spillway pages."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: NewsStatus | None = None
+    editor_note: str | None = Field(default=None, max_length=2000)
+    clear_editor_note: bool = False
+    related_links: list[RelatedLink] | None = Field(default=None, max_length=8)
+
+
+class RegulatoryAct(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    organ: str
+    act_type: str
+    act_number: str | None
+    act_date: date | None
+    title: str
+    summary: str | None
+    dou_date: date
+    dou_section: int | None
+    dou_edition: str | None
+    dou_page: str | None
+    dou_url: str
+    topics: list[str]
+
+
+class RegulatoryActDetail(RegulatoryAct):
+    body: str | None
+
+
+class RegulatoryActListResponse(BaseModel):
+    items: list[RegulatoryAct]
+    next_cursor: str | None
+
+
+class RegulatoryActPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: NewsStatus

@@ -23,6 +23,7 @@ from app.routers import (
     exports,
     forecast,
     health,
+    news,
     newsletter,
     plants,
     rankings,
@@ -99,7 +100,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.web_url],
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Authorization", "Content-Type"],
     )
     app.add_middleware(SelectiveGZipMiddleware)
@@ -113,6 +114,7 @@ def create_app(
         reports,
         exports,
         forecast,
+        news,
         system,
         newsletter,
         auth,
@@ -121,6 +123,7 @@ def create_app(
         health,
     ):
         app.include_router(module.router)
+    app.include_router(news.admin_router)
     return app
 
 
