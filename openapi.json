@@ -3250,6 +3250,96 @@
         }
       }
     },
+    "/v1/tariffs/flags": {
+      "get": {
+        "tags": [
+          "market"
+        ],
+        "summary": "Tariff Flags",
+        "description": "Tariff flag of each month (green, yellow, red 1 and 2, water scarcity).\n\nThe additional charge (R$ per MWh) is added to the homologated tariff, before taxes; it is not\nthe bill.",
+        "operationId": "tariff_flags_v1_tariffs_flags_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TariffFlagsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market/consumption": {
+      "get": {
+        "tags": [
+          "market"
+        ],
+        "summary": "Market Consumption",
+        "description": "Consumption in the regulated and free markets and the number of agents per class.",
+        "operationId": "market_consumption_v1_market_consumption_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketConsumptionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/newsletter": {
       "post": {
         "tags": [
@@ -6991,6 +7081,87 @@
           "member"
         ],
         "title": "LoginResponse"
+      },
+      "MarketAgentsPoint": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "format": "date",
+            "title": "Month"
+          },
+          "agent_class": {
+            "type": "string",
+            "title": "Agent Class"
+          },
+          "agents": {
+            "type": "integer",
+            "title": "Agents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "agent_class",
+          "agents"
+        ],
+        "title": "MarketAgentsPoint"
+      },
+      "MarketConsumptionPoint": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "format": "date",
+            "title": "Month"
+          },
+          "regulated_mw_avg": {
+            "type": "number",
+            "title": "Regulated Mw Avg"
+          },
+          "free_mw_avg": {
+            "type": "number",
+            "title": "Free Mw Avg"
+          },
+          "free_share_pct": {
+            "type": "number",
+            "title": "Free Share Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "regulated_mw_avg",
+          "free_mw_avg",
+          "free_share_pct"
+        ],
+        "title": "MarketConsumptionPoint"
+      },
+      "MarketConsumptionResponse": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSourceInfo"
+          },
+          "consumption": {
+            "items": {
+              "$ref": "#/components/schemas/MarketConsumptionPoint"
+            },
+            "type": "array",
+            "title": "Consumption"
+          },
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/MarketAgentsPoint"
+            },
+            "type": "array",
+            "title": "Agents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "consumption",
+          "agents"
+        ],
+        "title": "MarketConsumptionResponse"
       },
       "MemberLogin": {
         "properties": {
@@ -11045,6 +11216,51 @@
           "points"
         ],
         "title": "SubsystemStorageResponse"
+      },
+      "TariffFlagPoint": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "format": "date",
+            "title": "Month"
+          },
+          "flag": {
+            "type": "string",
+            "title": "Flag"
+          },
+          "additional_brl_per_mwh": {
+            "type": "number",
+            "title": "Additional Brl Per Mwh"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "flag",
+          "additional_brl_per_mwh"
+        ],
+        "title": "TariffFlagPoint"
+      },
+      "TariffFlagsResponse": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSourceInfo"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TariffFlagPoint"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "items"
+        ],
+        "title": "TariffFlagsResponse",
+        "description": "Tariff flags month by month. The charge is on top of the homologated tariff, before taxes."
       },
       "ThermalDispatchPoint": {
         "properties": {

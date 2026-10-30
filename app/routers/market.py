@@ -13,14 +13,20 @@ from app.db import SessionDep
 from app.models import (
     DataSource,
     Distributor,
+    MarketAgentsMonthly,
+    MarketConsumptionMonthly,
     PldDaily,
     PldHourly,
     PldMonthly,
     PldWeekly,
     ReliabilityMonthly,
+    TariffFlagMonthly,
 )
 from app.schemas import (
     DataSourceInfo,
+    MarketAgentsPoint,
+    MarketConsumptionPoint,
+    MarketConsumptionResponse,
     PldGranularity,
     PldPoint,
     PldResponse,
@@ -30,6 +36,8 @@ from app.schemas import (
     ReliabilityMonthPoint,
     ReliabilityResponse,
     Subsystem,
+    TariffFlagPoint,
+    TariffFlagsResponse,
 )
 
 router = APIRouter(tags=["market"])
@@ -321,6 +329,66 @@ def reliability_detail(
             distributor=summary,
             source=_source(session, "aneel-reliability"),
             points=points,
+        )
+
+    return cache.get_or_set(load)
+
+
+@router.get("/v1/tariffs/flags", response_model=TariffFlagsResponse)
+def tariff_flags(
+    session: SessionDep,
+    cache: PublicCacheDep,
+    date_from: Annotated[date | None, Query(alias="from")] = None,
+    date_to: Annotated[date | None, Query(alias="to")] = None,
+) -> TariffFlagsResponse:
+    """Tariff flag of each month (green, yellow, red 1 and 2, water scarcity).
+
+    The additional charge (R$ per MWh) is added to the homologated tariff, before taxes; it is not
+    the bill.
+    """
+
+    def load() -> TariffFlagsResponse:
+        stmt = select(TariffFlagMonthly).order_by(TariffFlagMonthly.month)
+        if date_from:
+            stmt = stmt.where(TariffFlagMonthly.month >= date_from)
+        if date_to:
+            stmt = stmt.where(TariffFlagMonthly.month <= date_to)
+        return TariffFlagsResponse(
+            source=_source(session, "aneel-tariff-flags"),
+            items=[TariffFlagPoint.model_validate(row) for row in session.scalars(stmt).all()],
+        )
+
+    return cache.get_or_set(load)
+
+
+@router.get("/v1/market/consumption", response_model=MarketConsumptionResponse)
+def market_consumption(session: SessionDep, cache: PublicCacheDep) -> MarketConsumptionResponse:
+    """Consumption in the regulated and free markets and the number of agents per class."""
+
+    def load() -> MarketConsumptionResponse:
+        rows = session.scalars(
+            select(MarketConsumptionMonthly).order_by(MarketConsumptionMonthly.month)
+        ).all()
+        consumption = []
+        for row in rows:
+            total = float(row.regulated_mw_avg) + float(row.free_mw_avg)
+            consumption.append(
+                MarketConsumptionPoint(
+                    month=row.month,
+                    regulated_mw_avg=float(row.regulated_mw_avg),
+                    free_mw_avg=float(row.free_mw_avg),
+                    free_share_pct=round(100 * float(row.free_mw_avg) / total, 2) if total else 0.0,
+                )
+            )
+        agents = session.scalars(
+            select(MarketAgentsMonthly).order_by(
+                MarketAgentsMonthly.month, MarketAgentsMonthly.agent_class
+            )
+        ).all()
+        return MarketConsumptionResponse(
+            source=_source(session, "ccee-market"),
+            consumption=consumption,
+            agents=[MarketAgentsPoint.model_validate(row) for row in agents],
         )
 
     return cache.get_or_set(load)
