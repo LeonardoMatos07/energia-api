@@ -21,8 +21,18 @@ Source = Literal["wind", "solar"]
 AggregateSource = Literal["wind", "solar", "total"]
 Kind = Literal["plant", "cluster"]
 SubsystemOrSin = Literal["N", "NE", "S", "SE", "SIN"]
-RevalidateTag = Literal["curtailment", "plants", "reports", "forecast", "news"]
-ALL_TAGS: list[RevalidateTag] = ["curtailment", "plants", "reports", "forecast", "news"]
+RevalidateTag = Literal[
+    "curtailment", "plants", "reports", "forecast", "news", "market", "reliability"
+]
+ALL_TAGS: list[RevalidateTag] = [
+    "curtailment",
+    "plants",
+    "reports",
+    "forecast",
+    "news",
+    "market",
+    "reliability",
+]
 
 
 def parse_month(value: Any) -> date:
@@ -1031,3 +1041,81 @@ class RegulatoryActPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: NewsStatus
+
+
+class DataSourceInfo(_Orm):
+    """Publisher, license and attribution of a dataset (shown on every screen that uses it)."""
+
+    slug: str
+    publisher_name: str
+    dataset_name: str
+    dataset_url: str
+    license_code: str
+    license_url: str
+    license_verified_at: date
+    attribution_text: str
+    update_frequency: str
+
+
+PldGranularity = Literal["hourly", "daily", "weekly", "monthly"]
+PldVariant = Literal["official", "shadow"]
+
+
+class PldPoint(BaseModel):
+    """One PLD value. Hourly and weekly points have no min, max or counts."""
+
+    period: str  # ISO date (daily, weekly, monthly) or local date-time (hourly)
+    subsystem: Subsystem
+    pld_avg_brl_per_mwh: float
+    pld_min_brl_per_mwh: float | None = None
+    pld_max_brl_per_mwh: float | None = None
+    pld_std_brl_per_mwh: float | None = None
+    hours_at_floor: int | None = None
+    hours_at_cap: int | None = None
+    hours: int | None = None
+
+
+class PldResponse(BaseModel):
+    granularity: PldGranularity
+    variant: PldVariant
+    date_from: date
+    date_to: date
+    source: DataSourceInfo
+    points: list[PldPoint]
+
+
+class ReliabilityDistributor(BaseModel):
+    """Annual indicators of a distributor, weighted by the consumers of each electrical set."""
+
+    cnpj: str
+    acronym: str
+    consumers: int
+    dec_hours: float
+    fec_count: float
+    dec_limit_hours: float | None
+    fec_limit_count: float | None
+    months_with_data: int
+    sets: int
+
+
+class ReliabilityResponse(BaseModel):
+    year: int
+    years: list[int]
+    months_with_data: int
+    source: DataSourceInfo
+    items: list[ReliabilityDistributor]
+
+
+class ReliabilityMonthPoint(BaseModel):
+    month: date
+    consumers: int
+    dec_hours: float
+    fec_count: float
+
+
+class ReliabilityDetailResponse(BaseModel):
+    year: int
+    years: list[int]
+    distributor: ReliabilityDistributor
+    source: DataSourceInfo
+    points: list[ReliabilityMonthPoint]

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     Integer,
@@ -891,3 +892,120 @@ class RegulatoryAct(Base):
         UniqueConstraint("dou_url", "content_hash", name="uq_regulatory_act_dou_url_hash"),
         Index("ix_regulatory_act_dou_date", "dou_date", "id"),
     )
+
+
+class DataSource(Base):
+    """Where a dataset comes from: publisher, license and the attribution text shown on screen."""
+
+    __tablename__ = "data_source"
+
+    slug: Mapped[str] = mapped_column(Text, primary_key=True)
+    publisher_name: Mapped[str] = mapped_column(Text)
+    dataset_name: Mapped[str] = mapped_column(Text)
+    dataset_url: Mapped[str] = mapped_column(Text)
+    license_code: Mapped[str] = mapped_column(Text)
+    license_url: Mapped[str] = mapped_column(Text)
+    license_verified_at: Mapped[date] = mapped_column(Date)
+    attribution_text: Mapped[str] = mapped_column(Text)
+    update_frequency: Mapped[str] = mapped_column(Text)
+
+
+class PldHourly(Base):
+    """Hourly PLD per submarket: the official series or a "shadow" methodology (CCEE)."""
+
+    __tablename__ = "pld_hourly"
+    __table_args__ = (
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),
+        CheckConstraint("variant IN ('official', 'shadow')", name="variant"),
+        CheckConstraint("pld_brl_per_mwh >= 0", name="price"),
+        Index("ix_pld_hourly_hour", "hour"),
+    )
+
+    hour_utc: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    hour: Mapped[datetime] = mapped_column(DateTime)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    variant: Mapped[str] = mapped_column(String(10), primary_key=True)
+    method: Mapped[str] = mapped_column(Text, primary_key=True)
+    pld_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+
+
+class PldWeekly(Base):
+    __tablename__ = "pld_weekly"
+    __table_args__ = (CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),)
+
+    week_start: Mapped[date] = mapped_column(Date, primary_key=True)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    pld_avg_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+
+
+class PldDaily(Base):
+    __tablename__ = "pld_daily"
+    __table_args__ = (CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),)
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    pld_avg_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    pld_min_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    pld_max_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    pld_std_brl_per_mwh: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    hours_at_floor: Mapped[int] = mapped_column(Integer)
+    hours_at_cap: Mapped[int] = mapped_column(Integer)
+    hours: Mapped[int] = mapped_column(Integer)
+
+
+class PldMonthly(Base):
+    __tablename__ = "pld_monthly"
+    __table_args__ = (CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),)
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    pld_avg_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    pld_min_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    pld_max_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    pld_std_brl_per_mwh: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    hours_at_floor: Mapped[int] = mapped_column(Integer)
+    hours_at_cap: Mapped[int] = mapped_column(Integer)
+    hours: Mapped[int] = mapped_column(Integer)
+
+
+class Distributor(Base):
+    """A regulated distribution company (ANEEL). Companies only, no personal data."""
+
+    __tablename__ = "distributor"
+
+    cnpj: Mapped[str] = mapped_column(Text, primary_key=True)
+    acronym: Mapped[str] = mapped_column(Text)
+
+
+class ConsumerUnitSet(Base):
+    """An electrical set of consumer units served by a distributor."""
+
+    __tablename__ = "consumer_unit_set"
+
+    distributor_cnpj: Mapped[str] = mapped_column(ForeignKey("distributor.cnpj"), primary_key=True)
+    set_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    set_name: Mapped[str] = mapped_column(Text)
+
+
+class ReliabilityMonthly(Base):
+    """Monthly DEC (hours) and FEC (interruptions) per electrical set, with the year's limits."""
+
+    __tablename__ = "reliability_monthly"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["distributor_cnpj", "set_id"],
+            ["consumer_unit_set.distributor_cnpj", "consumer_unit_set.set_id"],
+        ),
+        CheckConstraint("dec_hours IS NULL OR dec_hours >= 0", name="dec"),
+        CheckConstraint("fec_count IS NULL OR fec_count >= 0", name="fec"),
+        Index("ix_reliability_monthly_distributor_cnpj", "distributor_cnpj"),
+    )
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    distributor_cnpj: Mapped[str] = mapped_column(Text, primary_key=True)
+    set_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    consumers: Mapped[int | None] = mapped_column(BigInteger)
+    dec_hours: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    fec_count: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    dec_limit_hours: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    fec_limit_count: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
