@@ -3017,6 +3017,239 @@
         }
       }
     },
+    "/v1/market/pld": {
+      "get": {
+        "tags": [
+          "market"
+        ],
+        "summary": "Market Pld",
+        "description": "PLD per submarket. Hourly (max 31 days), daily, weekly average or monthly statistics.\n\n`variant=shadow` is the CCEE \"shadow\" simulation, which is not the settlement price. It only\nexists for the hourly series (2022 to 2024).",
+        "operationId": "market_pld_v1_market_pld_get",
+        "parameters": [
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hourly",
+                "daily",
+                "weekly",
+                "monthly"
+              ],
+              "type": "string",
+              "default": "daily",
+              "title": "Granularity"
+            }
+          },
+          {
+            "name": "subsystem",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "N",
+                    "NE",
+                    "S",
+                    "SE"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subsystem"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "official",
+                "shadow"
+              ],
+              "type": "string",
+              "default": "official",
+              "title": "Variant"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PldResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reliability": {
+      "get": {
+        "tags": [
+          "market"
+        ],
+        "summary": "Reliability",
+        "description": "DEC (hours) and FEC (interruptions) per distributor for a year, worst first.\n\nAnnual values add the monthly indicators; a year in progress shows the months published so\nfar, and `months_with_data` says how many.",
+        "operationId": "reliability_v1_reliability_get",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReliabilityResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reliability/{cnpj}": {
+      "get": {
+        "tags": [
+          "market"
+        ],
+        "summary": "Reliability Detail",
+        "description": "Monthly DEC and FEC of one distributor (consumer-weighted over its electrical sets).",
+        "operationId": "reliability_detail_v1_reliability__cnpj__get",
+        "parameters": [
+          {
+            "name": "cnpj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Cnpj"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReliabilityDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/newsletter": {
       "post": {
         "tags": [
@@ -5302,6 +5535,61 @@
           "members"
         ],
         "title": "DailyUsage"
+      },
+      "DataSourceInfo": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "publisher_name": {
+            "type": "string",
+            "title": "Publisher Name"
+          },
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name"
+          },
+          "dataset_url": {
+            "type": "string",
+            "title": "Dataset Url"
+          },
+          "license_code": {
+            "type": "string",
+            "title": "License Code"
+          },
+          "license_url": {
+            "type": "string",
+            "title": "License Url"
+          },
+          "license_verified_at": {
+            "type": "string",
+            "format": "date",
+            "title": "License Verified At"
+          },
+          "attribution_text": {
+            "type": "string",
+            "title": "Attribution Text"
+          },
+          "update_frequency": {
+            "type": "string",
+            "title": "Update Frequency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "publisher_name",
+          "dataset_name",
+          "dataset_url",
+          "license_code",
+          "license_url",
+          "license_verified_at",
+          "attribution_text",
+          "update_frequency"
+        ],
+        "title": "DataSourceInfo",
+        "description": "Publisher, license and attribution of a dataset (shown on every screen that uses it)."
       },
       "Dispatch": {
         "properties": {
@@ -8142,6 +8430,154 @@
         ],
         "title": "PlantSummary"
       },
+      "PldPoint": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "title": "Period"
+          },
+          "subsystem": {
+            "type": "string",
+            "enum": [
+              "N",
+              "NE",
+              "S",
+              "SE"
+            ],
+            "title": "Subsystem"
+          },
+          "pld_avg_brl_per_mwh": {
+            "type": "number",
+            "title": "Pld Avg Brl Per Mwh"
+          },
+          "pld_min_brl_per_mwh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pld Min Brl Per Mwh"
+          },
+          "pld_max_brl_per_mwh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pld Max Brl Per Mwh"
+          },
+          "pld_std_brl_per_mwh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pld Std Brl Per Mwh"
+          },
+          "hours_at_floor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours At Floor"
+          },
+          "hours_at_cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours At Cap"
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "subsystem",
+          "pld_avg_brl_per_mwh"
+        ],
+        "title": "PldPoint",
+        "description": "One PLD value. Hourly and weekly points have no min, max or counts."
+      },
+      "PldResponse": {
+        "properties": {
+          "granularity": {
+            "type": "string",
+            "enum": [
+              "hourly",
+              "daily",
+              "weekly",
+              "monthly"
+            ],
+            "title": "Granularity"
+          },
+          "variant": {
+            "type": "string",
+            "enum": [
+              "official",
+              "shadow"
+            ],
+            "title": "Variant"
+          },
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Date To"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DataSourceInfo"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PldPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "granularity",
+          "variant",
+          "date_from",
+          "date_to",
+          "source",
+          "points"
+        ],
+        "title": "PldResponse"
+      },
       "PowerPlantInfo": {
         "properties": {
           "id": {
@@ -8765,6 +9201,178 @@
           "href"
         ],
         "title": "RelatedLink"
+      },
+      "ReliabilityDetailResponse": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "years": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Years"
+          },
+          "distributor": {
+            "$ref": "#/components/schemas/ReliabilityDistributor"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DataSourceInfo"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ReliabilityMonthPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "years",
+          "distributor",
+          "source",
+          "points"
+        ],
+        "title": "ReliabilityDetailResponse"
+      },
+      "ReliabilityDistributor": {
+        "properties": {
+          "cnpj": {
+            "type": "string",
+            "title": "Cnpj"
+          },
+          "acronym": {
+            "type": "string",
+            "title": "Acronym"
+          },
+          "consumers": {
+            "type": "integer",
+            "title": "Consumers"
+          },
+          "dec_hours": {
+            "type": "number",
+            "title": "Dec Hours"
+          },
+          "fec_count": {
+            "type": "number",
+            "title": "Fec Count"
+          },
+          "dec_limit_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dec Limit Hours"
+          },
+          "fec_limit_count": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fec Limit Count"
+          },
+          "months_with_data": {
+            "type": "integer",
+            "title": "Months With Data"
+          },
+          "sets": {
+            "type": "integer",
+            "title": "Sets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cnpj",
+          "acronym",
+          "consumers",
+          "dec_hours",
+          "fec_count",
+          "dec_limit_hours",
+          "fec_limit_count",
+          "months_with_data",
+          "sets"
+        ],
+        "title": "ReliabilityDistributor",
+        "description": "Annual indicators of a distributor, weighted by the consumers of each electrical set."
+      },
+      "ReliabilityMonthPoint": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "format": "date",
+            "title": "Month"
+          },
+          "consumers": {
+            "type": "integer",
+            "title": "Consumers"
+          },
+          "dec_hours": {
+            "type": "number",
+            "title": "Dec Hours"
+          },
+          "fec_count": {
+            "type": "number",
+            "title": "Fec Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "consumers",
+          "dec_hours",
+          "fec_count"
+        ],
+        "title": "ReliabilityMonthPoint"
+      },
+      "ReliabilityResponse": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "years": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Years"
+          },
+          "months_with_data": {
+            "type": "integer",
+            "title": "Months With Data"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DataSourceInfo"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReliabilityDistributor"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "years",
+          "months_with_data",
+          "source",
+          "items"
+        ],
+        "title": "ReliabilityResponse"
       },
       "Report": {
         "properties": {
@@ -9613,7 +10221,9 @@
                 "plants",
                 "reports",
                 "forecast",
-                "news"
+                "news",
+                "market",
+                "reliability"
               ]
             },
             "type": "array",
@@ -9633,7 +10243,9 @@
                 "plants",
                 "reports",
                 "forecast",
-                "news"
+                "news",
+                "market",
+                "reliability"
               ]
             },
             "type": "array",

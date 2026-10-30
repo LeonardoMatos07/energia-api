@@ -374,3 +374,43 @@ Main variables: `DATABASE_URL` (API), `WAREHOUSE_DSN` (data), `API_URL`, `WEB_UR
 - `spillway-web`: deployed by Vercel (one preview per PR); CI runs lint, types and tests.
 - `spillway-infra`: `terraform plan` on PRs; `apply` on `main` with manual approval
   (`production` environment with required reviewers).
+
+### Market prices and quality of supply (migration 0014)
+
+Sources, licenses and who writes what. All of these tables are written by `spillway-data` (role
+`energia_data`) and only read by the API.
+
+- `data_source`: registry of datasets with `slug` (PK), `publisher_name`, `dataset_name`,
+  `dataset_url`, `license_code`, `license_url`, `license_verified_at`, `attribution_text` and
+  `update_frequency`. **Written by the migration (seed), never by the pipeline.** The API returns
+  the matching row as `source` in every response, and the web shows it with `DataAttribution`.
+  Seeded: `ccee-pld` (CC BY 4.0) and `aneel-reliability` (ODbL 1.0).
+- `pld_hourly`: PK `(hour_utc, subsystem, variant, method)`; `hour` (local Brasilia time),
+  `pld_brl_per_mwh`. `variant` is `official` (CCEE hourly PLD, 2021 on) or `shadow` (CCEE "shadow"
+  simulation, 2022 to 2024; it is **not** the settlement price). `method` is `official` or the
+  shadow methodology (`NEWAVE_HIBRIDO`, ...).
+- `pld_weekly`: PK `(week_start, subsystem)`; `pld_avg_brl_per_mwh` (CCEE weekly average, 2001 on).
+- `pld_daily` and `pld_monthly`: PK `(day|month, subsystem)`; `pld_avg_brl_per_mwh`,
+  `pld_min_brl_per_mwh`, `pld_max_brl_per_mwh`, `pld_std_brl_per_mwh`, `hours_at_floor`,
+  `hours_at_cap`, `hours`. Derived from the **official** hourly series; floor and cap are the
+  yearly ANEEL limits (seed `pld_limits.csv` in `spillway-data`).
+- `distributor`: PK `cnpj`; `acronym`. Regulated distribution companies only (no personal data).
+- `consumer_unit_set`: PK `(distributor_cnpj, set_id)`; `set_name` (electrical set).
+- `reliability_monthly`: PK `(month, distributor_cnpj, set_id)`; `consumers`, `dec_hours` (hours),
+  `fec_count` (interruptions), `dec_limit_hours` and `fec_limit_count` (the **annual** regulatory
+  limit of that set and year, repeated in each month). Source: ANEEL
+  `indicadores-coletivos-de-continuidade-dec-e-fec`, 2020 on.
+
+How `spillway-data` writes them: `ccee_pld_pipeline` (daily) deletes the year of a variant from
+`pld_hourly` and reinserts it, upserts `pld_weekly`, then rebuilds `pld_daily` and `pld_monthly`
+from the first affected year. `aneel_reliability_pipeline` (monthly) upserts `distributor` and
+`consumer_unit_set`, then replaces `reliability_monthly` from the first month it loaded. Both keep
+the original files in the lake under `bronze/ccee/` and `bronze/aneel/reliability/`.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/v1/market/pld?granularity=&subsystem=&variant=&from=&to=` | Public | `granularity` is `hourly` (at most 31 days), `daily` (default, last 90 days), `weekly` or `monthly`. `variant=shadow` is hourly only. `{"granularity", "variant", "date_from", "date_to", "source", "points"}` |
+| GET | `/v1/reliability?year=` | Public | DEC and FEC per distributor for the year (sum of the monthly values, consumer-weighted over its sets), worst DEC first, with `months_with_data`, the annual limits and `source` |
+| GET | `/v1/reliability/{cnpj}?year=` | Public | Monthly DEC and FEC of one distributor |
+
+Cache tags `market` and `reliability` can be passed to `POST /v1/admin/revalidate`.
