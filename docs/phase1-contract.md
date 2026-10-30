@@ -182,7 +182,7 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
   transmission limit, so there is no "hours at limit" column.
 - `thermal_dispatch_monthly`: PK `(month, plant_code, reason)`; `plant_code` is the planning code
   (`cod_usinaplanejamento`), plus `plant_name`, `ceg`, `fuel_type`, `subsystem`, `verified_mwh`,
-  `programmed_mwh`. `reason` is one of `total`, `merit_order`, `merit_order_ref`,
+  `programmed_mwh`. `reason` is one of `total`, `merit_order`,
   `merit_order_above_inflexibility`, `inflexibility`, `inflexibility_in_merit`,
   `inflexibility_pure`, `electrical_reason`, `energy_security`, `gfom`, `loss_replacement`,
   `export`, `power_reserve`, `gsub`, `unit_commitment`, `constrained_off`. Reasons **overlap**
