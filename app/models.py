@@ -492,8 +492,8 @@ class SubsystemStorageDaily(Base):
 class ReservoirDaily(Base):
     __tablename__ = "reservoir_daily"
     __table_args__ = (
-        # above 100 while a reservoir spills over its nominal maximum (the ONS shows up to ~170)
-        CheckConstraint("storage_pct IS NULL OR storage_pct BETWEEN 0 AND 200", name="storage_pct"),
+        # no range check on storage_pct: it is negative below the minimum operating volume and
+        # above 100 while a reservoir spills (the ONS shows -83% to 379%)
         Index("ix_reservoir_daily_reservoir_id_day", "reservoir_id", "day"),
     )
 

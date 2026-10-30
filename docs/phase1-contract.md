@@ -199,7 +199,8 @@ m3/s (`_m3s`) and levels in metres (`_m`).
 - `subsystem_storage_daily`: PK `(day, subsystem)`; `storage_max_mw_month`, `storage_mw_month`,
   `storage_pct` (0 to 100), `ena_gross_*`, `ena_storable_*`.
 - `reservoir_daily`: PK `(day, reservoir_id)`, FK `reservoir.id`; the same storage and ENA columns
-  (`storage_pct` is 0 to 200: a reservoir that spills is above its nominal maximum)
+  (`storage_pct` has no range check: it is negative below the minimum operating volume and
+  above 100 while a reservoir spills; the ONS shows -83% to 379% in 2015)
   per reservoir plus `useful_volume_pct`, `inflow_m3s`, `natural_inflow_m3s`, `outflow_m3s`,
   `turbined_m3s`, `spilled_m3s`, `upstream_level_m`, `downstream_level_m`. The ONS uses three
   reservoir codes: EAR and ENA use the planning code (`cod_resplanejamento`), the hydrological
