@@ -383,6 +383,64 @@ class PlantMonthlyGeneration(Base):
     capacity_factor: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
 
 
+class InterchangeHourly(Base):
+    """Hourly interchange between two areas, in average MW; positive means origin -> destination.
+
+    National rows go between subsystems; international rows go from ``BR`` to a country.
+    """
+
+    __tablename__ = "interchange_hourly"
+    __table_args__ = (
+        CheckConstraint("scope IN ('national', 'international')", name="scope"),
+        Index("ix_interchange_hourly_hour", "hour"),
+    )
+
+    hour: Mapped[datetime] = mapped_column(DateTime, primary_key=True)  # Brasilia time
+    origin: Mapped[str] = mapped_column(Text, primary_key=True)
+    destination: Mapped[str] = mapped_column(Text, primary_key=True)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    hour_utc: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    flow_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    scheduled_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+
+
+class InterchangeMonthly(Base):
+    __tablename__ = "interchange_monthly"
+    __table_args__ = (CheckConstraint("scope IN ('national', 'international')", name="scope"),)
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    origin: Mapped[str] = mapped_column(Text, primary_key=True)
+    destination: Mapped[str] = mapped_column(Text, primary_key=True)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    scheduled_energy_mwh: Mapped[Decimal | None] = mapped_column(Numeric(16, 3))
+    avg_mw: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    peak_mw: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    min_mw: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+
+
+class ThermalDispatchMonthly(Base):
+    """Verified and programmed thermal generation per plant and dispatch reason.
+
+    The reasons of the ONS file overlap in places (``merit_order`` contains
+    ``merit_order_above_inflexibility`` and ``inflexibility`` contains its two parts), so rows of
+    different reasons must not be added up; ``total`` is the plant's whole generation.
+    """
+
+    __tablename__ = "thermal_dispatch_monthly"
+    __table_args__ = (Index("ix_thermal_dispatch_monthly_reason", "reason", "month"),)
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    plant_code: Mapped[str] = mapped_column(Text, primary_key=True)  # cod_usinaplanejamento
+    reason: Mapped[str] = mapped_column(Text, primary_key=True)
+    plant_name: Mapped[str] = mapped_column(Text, nullable=False)
+    ceg: Mapped[str | None] = mapped_column(Text)
+    fuel_type: Mapped[str | None] = mapped_column(Text)
+    subsystem: Mapped[str] = mapped_column(String(3), nullable=False)
+    verified_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    programmed_mwh: Mapped[Decimal | None] = mapped_column(Numeric(16, 3))
+
+
 class Member(Base):
     __tablename__ = "member"
     __table_args__ = (
@@ -531,6 +589,8 @@ for _name in (
     "monthly_report",
     "subsystem_monthly_generation",
     "plant_monthly_generation",
+    "interchange_monthly",
+    "thermal_dispatch_monthly",
 ):
     _table = Base.metadata.tables[_name]
     _table.append_constraint(

@@ -722,3 +722,54 @@ class PlantGenerationPoint(_Orm):
 class PlantGenerationResponse(BaseModel):
     plant: PowerPlantInfo
     points: list[PlantGenerationPoint]
+
+
+InterchangeScope = Literal["national", "international"]
+ThermalReason = str
+
+
+class InterchangeMonthlyPoint(_Orm):
+    month: Month
+    origin: str
+    destination: str
+    scope: InterchangeScope
+    energy_mwh: float
+    scheduled_energy_mwh: float | None
+    avg_mw: float
+    peak_mw: float
+    min_mw: float
+
+
+class InterchangeMonthlyResponse(BaseModel):
+    points: list[InterchangeMonthlyPoint]
+
+
+class InterchangeHourlyPoint(_Orm):
+    hour: datetime
+    hour_utc: datetime
+    origin: str
+    destination: str
+    scope: InterchangeScope
+    flow_mw_avg: float | None
+    scheduled_mw_avg: float | None
+
+
+class InterchangeHourlyResponse(BaseModel):
+    date_from: date
+    date_to: date
+    points: list[InterchangeHourlyPoint]
+
+
+class ThermalDispatchPoint(BaseModel):
+    month: Month
+    reason: str
+    subsystem: str
+    plant_code: str | None
+    plant_name: str | None
+    plants: int
+    verified_mwh: float
+    programmed_mwh: float | None
+
+
+class ThermalDispatchResponse(BaseModel):
+    points: list[ThermalDispatchPoint]
