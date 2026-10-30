@@ -84,7 +84,7 @@ def upgrade() -> None:
         _num("upstream_level_m", 10),
         _num("downstream_level_m", 10),
         sa.CheckConstraint(
-            "storage_pct IS NULL OR storage_pct BETWEEN 0 AND 100",
+            "storage_pct IS NULL OR storage_pct BETWEEN 0 AND 200",
             name=op.f("ck_reservoir_daily_storage_pct"),
         ),
         sa.ForeignKeyConstraint(
