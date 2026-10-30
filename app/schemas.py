@@ -775,6 +775,156 @@ class ThermalDispatchResponse(BaseModel):
     points: list[ThermalDispatchPoint]
 
 
+class SubsystemStoragePoint(_Orm):
+    day: date
+    subsystem: Subsystem
+    storage_max_mw_month: float | None
+    storage_mw_month: float | None
+    storage_pct: float | None
+    ena_gross_mw_avg: float | None
+    ena_gross_pct_mlt: float | None
+    ena_storable_mw_avg: float | None
+    ena_storable_pct_mlt: float | None
+
+
+class SubsystemStorageResponse(BaseModel):
+    date_from: date
+    date_to: date
+    points: list[SubsystemStoragePoint]
+
+
+class ReservoirInfo(_Orm):
+    id: str
+    name: str
+    slug: str
+    reservoir_type: str | None
+    plant_name: str | None
+    ceg: str | None
+    subsystem: str | None
+    ree: str | None
+    basin: str | None
+    river: str | None
+    commissioned_on: date | None
+    useful_volume_hm3: float | None
+    max_level_m: float | None
+    min_level_m: float | None
+    latitude: float | None
+    longitude: float | None
+
+
+class ReservoirSummary(ReservoirInfo):
+    latest_day: date | None
+    storage_pct: float | None
+    ena_storable_pct_mlt: float | None
+
+
+class ReservoirListResponse(BaseModel):
+    latest_day: date | None
+    items: list[ReservoirSummary]
+
+
+class ReservoirDailyPoint(_Orm):
+    day: date
+    storage_mw_month: float | None
+    storage_max_mw_month: float | None
+    storage_pct: float | None
+    useful_volume_pct: float | None
+    ena_gross_mw_avg: float | None
+    ena_gross_pct_mlt: float | None
+    ena_storable_mw_avg: float | None
+    ena_storable_pct_mlt: float | None
+    inflow_m3s: float | None
+    natural_inflow_m3s: float | None
+    outflow_m3s: float | None
+    turbined_m3s: float | None
+    spilled_m3s: float | None
+    upstream_level_m: float | None
+    downstream_level_m: float | None
+
+
+class ReservoirDetailResponse(BaseModel):
+    date_from: date
+    date_to: date
+    reservoir: ReservoirInfo
+    points: list[ReservoirDailyPoint]
+
+
+class SpilledEnergyPoint(_Orm):
+    month: Month
+    plant_code: str
+    plant_name: str
+    subsystem: str | None
+    basin: str | None
+    river: str | None
+    agent: str | None
+    spilled_energy_mwh: float
+    spilled_turbinable_energy_mwh: float
+
+
+class SpilledEnergyResponse(BaseModel):
+    points: list[SpilledEnergyPoint]
+
+
+class GridVersion(_Orm):
+    valid_from: date
+    valid_to: date | None
+
+
+class TransmissionLineItem(GridVersion):
+    equipment_code: str
+    name: str | None
+    voltage_kv: float | None
+    line_type: str | None
+    network_type: str | None
+    owner_agent: str | None
+    from_substation: str | None
+    to_substation: str | None
+    from_subsystem: str | None
+    to_subsystem: str | None
+    from_state: str | None
+    to_state: str | None
+    length_km: float | None
+    capacity_long_no_limit_a: float | None
+    capacity_long_with_limit_a: float | None
+    capacity_short_no_limit_a: float | None
+    capacity_short_with_limit_a: float | None
+    positive_seq_resistance: float | None
+    positive_seq_reactance: float | None
+    positive_seq_shunt: float | None
+    commissioned_on: date | None
+    decommissioned_on: date | None
+    planned_on: date | None
+
+
+class TransmissionLineListResponse(BaseModel):
+    as_of: date | None
+    total: int
+    page: int
+    page_size: int
+    items: list[TransmissionLineItem]
+
+
+class SubstationItem(GridVersion):
+    station_id: str
+    substation_id: str | None
+    name: str | None
+    voltage_kv: float | None
+    subsystem: str | None
+    state: str | None
+    main_agent: str | None
+    bus_number: int | None
+    latitude: float | None
+    longitude: float | None
+
+
+class SubstationListResponse(BaseModel):
+    as_of: date | None
+    total: int
+    page: int
+    page_size: int
+    items: list[SubstationItem]
+
+
 NewsStatus = Literal["published", "hidden", "removed_on_request"]
 
 
