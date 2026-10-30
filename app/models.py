@@ -536,3 +536,94 @@ for _name in (
     _table.append_constraint(
         CheckConstraint(extract("day", _table.c.month) == 1, name="month_first_day")
     )
+
+
+class NewsSource(Base):
+    """A public source of sector news and the license it declares (seeded by migration)."""
+
+    __tablename__ = "news_source"
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    publisher_name: Mapped[str] = mapped_column(Text, nullable=False)
+    homepage_url: Mapped[str] = mapped_column(Text, nullable=False)
+    feed_url: Mapped[str | None] = mapped_column(Text)
+    fetch_method: Mapped[str] = mapped_column(Text, nullable=False)
+    license_code: Mapped[str] = mapped_column(Text, nullable=False)
+    license_url: Mapped[str] = mapped_column(Text, nullable=False)
+    license_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    license_evidence_url: Mapped[str | None] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "fetch_method IN ('rss', 'api', 'listing', 'open-data')", name="fetch_method"
+        ),
+    )
+
+
+class NewsItem(Base):
+    """One news item exactly as the source published it.
+
+    The pipeline writes everything except the admin columns (status, editor_*, related_links).
+    """
+
+    __tablename__ = "news_item"
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("news_source.id"), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    topics: Mapped[list[str]] = mapped_column(JsonDocument, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="published", server_default="published"
+    )
+    editor_note: Mapped[str | None] = mapped_column(Text)
+    editor_note_by: Mapped[str | None] = mapped_column(Text)
+    editor_note_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    related_links: Mapped[list[dict[str, Any]] | None] = mapped_column(JsonDocument)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('published', 'hidden', 'removed_on_request')", name="status"),
+        Index("ix_news_item_published_at", "published_at", "id"),
+        Index("ix_news_item_source_id", "source_id"),
+    )
+
+
+class RegulatoryAct(Base):
+    """An official act published in the DOU (no copyright, Lei 9.610/1998 art. 8, IV)."""
+
+    __tablename__ = "regulatory_act"
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    organ: Mapped[str] = mapped_column(Text, nullable=False)
+    act_type: Mapped[str] = mapped_column(Text, nullable=False)
+    act_number: Mapped[str | None] = mapped_column(Text)
+    act_date: Mapped[date | None] = mapped_column(Date)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text)
+    body: Mapped[str | None] = mapped_column(Text)
+    dou_date: Mapped[date] = mapped_column(Date, nullable=False)
+    dou_section: Mapped[int | None] = mapped_column(SmallInteger)
+    dou_edition: Mapped[str | None] = mapped_column(Text)
+    dou_page: Mapped[str | None] = mapped_column(Text)
+    dou_url: Mapped[str] = mapped_column(Text, nullable=False)
+    topics: Mapped[list[str]] = mapped_column(JsonDocument, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="published", server_default="published"
+    )
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('published', 'hidden', 'removed_on_request')", name="status"),
+        UniqueConstraint("dou_url", "content_hash", name="uq_regulatory_act_dou_url_hash"),
+        Index("ix_regulatory_act_dou_date", "dou_date", "id"),
+    )

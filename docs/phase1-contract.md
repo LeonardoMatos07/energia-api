@@ -80,6 +80,15 @@ PK `(plant_id, month)`. Indexes: `(month, national_rank)`, `(month, state_rank)`
 
 `spillway-forecast` (`spillway publish`, role `energia_forecast`) writes `forecast_model`, `forecast_run` and `forecast_hourly` in one transaction; the API only reads the latest run with `status = 'ready'`. Routes: `GET /v1/forecast?scope=&source=&days=`, `GET /v1/forecast/scopes`, `GET /v1/forecast/model` (public, short cache, `404` until something is published).
 
+### News tables (`news_source`, `news_item`, `regulatory_act`)
+
+Public sector news, shown exactly as the source published it, always with the publisher, date, link and license.
+
+- `news_source`: one row per source (`slug` unique: `aneel`, `mme`, `anp`, `epe`, `dou`) with `publisher_name`, `homepage_url`, `feed_url`, `fetch_method` (`rss`, `api`, `listing`, `open-data`), `license_code` / `license_url`, `license_verified_at`, `license_evidence_url` and `active`. Seeded by the migration; nobody writes it at runtime. `dou` is seeded `active = false` until a legitimate open channel exists.
+- `news_item`: `url` is canonical and **unique**. Written by the pipeline: `source_id`, `url`, `title`, `summary` (as published), `published_at`, `source_updated_at` (UTC), `fetched_at`, `content_hash`, `topics` (JSON list of slugs). Written by the **API (admin)**: `status` (`published` default, `hidden`, `removed_on_request`), `editor_note`, `editor_note_by`, `editor_note_at`, `related_links` (JSON list of `{label, href}`). The pipeline upserts by `url` and never touches the admin columns.
+- `regulatory_act`: official acts from the DOU (`organ`, `act_type`, `act_number`, `act_date`, `title`, `summary`, `body`, full DOU reference `dou_date`, `dou_section`, `dou_edition`, `dou_page`, `dou_url`, `topics`, `content_hash`, `fetched_at`). Unique `(dou_url, content_hash)`. The pipeline writes everything except `status`, which the API (admin) updates.
+- Reads: the API serves only `status = 'published'` rows, in public routes under `/v1/news` and `/v1/regulatory-acts`.
+
 ### `state_monthly_curtailment`
 | Column | Type |
 |---|---|
@@ -176,8 +185,12 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
 - `*_monthly_curtailment`: for each processed month, deletes the rows of that `month` and
   inserts the new ones, in one transaction (idempotent).
 - `load_run`: one row per source and month, plus one `aggregates` row per month.
+<<<<<<< Updated upstream
 - `power_plant`: upsert by `id`. `subsystem_monthly_generation`, `plant_monthly_generation`: same
   delete-and-insert by `month`. `subsystem_hourly_balance`: delete-and-insert by `hour` range.
+=======
+- `news_item` / `regulatory_act`: upsert by `url` (or `(dou_url, content_hash)`), only the pipeline columns; `SELECT` on `news_source`.
+>>>>>>> Stashed changes
 - Its own database user, with `SELECT, INSERT, UPDATE, DELETE` on these tables only.
 
 ## Data lake (S3)
