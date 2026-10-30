@@ -476,7 +476,7 @@ class SubsystemStorageDaily(Base):
     __tablename__ = "subsystem_storage_daily"
     __table_args__ = (
         CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),
-        CheckConstraint("storage_pct IS NULL OR storage_pct BETWEEN 0 AND 100", name="storage_pct"),
+        CheckConstraint("storage_pct IS NULL OR storage_pct BETWEEN 0 AND 200", name="storage_pct"),
     )
 
     day: Mapped[date] = mapped_column(Date, primary_key=True)
