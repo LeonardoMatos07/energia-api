@@ -33,6 +33,9 @@ TABLES = {
     "newsletter_subscriber",
     "organization",
     "app_user",
+    "news_source",
+    "news_item",
+    "regulatory_act",
 }
 
 
