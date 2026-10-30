@@ -863,3 +863,63 @@ class SpilledEnergyPoint(_Orm):
 
 class SpilledEnergyResponse(BaseModel):
     points: list[SpilledEnergyPoint]
+
+
+class GridVersion(_Orm):
+    valid_from: date
+    valid_to: date | None
+
+
+class TransmissionLineItem(GridVersion):
+    equipment_code: str
+    name: str | None
+    voltage_kv: float | None
+    line_type: str | None
+    network_type: str | None
+    owner_agent: str | None
+    from_substation: str | None
+    to_substation: str | None
+    from_subsystem: str | None
+    to_subsystem: str | None
+    from_state: str | None
+    to_state: str | None
+    length_km: float | None
+    capacity_long_no_limit_a: float | None
+    capacity_long_with_limit_a: float | None
+    capacity_short_no_limit_a: float | None
+    capacity_short_with_limit_a: float | None
+    positive_seq_resistance: float | None
+    positive_seq_reactance: float | None
+    positive_seq_shunt: float | None
+    commissioned_on: date | None
+    decommissioned_on: date | None
+    planned_on: date | None
+
+
+class TransmissionLineListResponse(BaseModel):
+    as_of: date | None
+    total: int
+    page: int
+    page_size: int
+    items: list[TransmissionLineItem]
+
+
+class SubstationItem(GridVersion):
+    station_id: str
+    substation_id: str | None
+    name: str | None
+    voltage_kv: float | None
+    subsystem: str | None
+    state: str | None
+    main_agent: str | None
+    bus_number: int | None
+    latitude: float | None
+    longitude: float | None
+
+
+class SubstationListResponse(BaseModel):
+    as_of: date | None
+    total: int
+    page: int
+    page_size: int
+    items: list[SubstationItem]
