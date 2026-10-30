@@ -154,11 +154,30 @@ periods.
   `name text NULL`, `organization_id uuid FK NULL`, `role text NOT NULL`
   (`owner`, `member`, `admin`), `created_at`.
 
+### System generation tables (migration 0008)
+Written by `spillway-data` (`system` pipeline). Power values are **average MW** over the hour
+(ONS "MWmed", so MWh in an hour); energies are MWh. Hours are Brasilia time (`hour`) plus UTC
+(`hour_utc`). `subsystem` uses the same codes as the other tables.
+- `subsystem_hourly_balance`: PK `(hour, subsystem)`; `hydro_mw_avg`, `thermal_mw_avg`,
+  `wind_mw_avg`, `solar_mw_avg`, `load_mw_avg`, `net_interchange_mw_avg` (nullable). Thermal
+  includes nuclear. Subsystems `N`, `NE`, `S`, `SE`.
+- `subsystem_monthly_generation`: PK `(month, subsystem, source)`; `source` is `hydro`,
+  `thermal`, `wind` or `solar`; subsystem also has `SIN` (sum); `energy_mwh`, `avg_mw`,
+  `peak_mw`, `share_pct` (share of the four sources).
+- `power_plant`: the whole generation fleet (`id` PK, `name`, `slug` unique, `source_type` in
+  `hydro|thermal|nuclear|wind|solar|other`, `fuel_type`, `state`, `subsystem`, `ceg`,
+  `capacity_mw`, `updated_at`). `plant` stays the curtailment product (wind and solar only), so
+  hydro and thermal plants do not fit it; wind and solar plants use the same id and slug rule.
+- `plant_monthly_generation`: PK `(month, plant_id)`, FK `power_plant.id`; `energy_mwh`,
+  `avg_mw`, `peak_mw`, `capacity_factor` (energy / (capacity x hours of the month), 0 to 1.05).
+
 ### How `spillway-data` writes
 - `plant`: upsert by `id`.
 - `*_monthly_curtailment`: for each processed month, deletes the rows of that `month` and
   inserts the new ones, in one transaction (idempotent).
 - `load_run`: one row per source and month, plus one `aggregates` row per month.
+- `power_plant`: upsert by `id`. `subsystem_monthly_generation`, `plant_monthly_generation`: same
+  delete-and-insert by `month`. `subsystem_hourly_balance`: delete-and-insert by `hour` range.
 - Its own database user, with `SELECT, INSERT, UPDATE, DELETE` on these tables only.
 
 ## Data lake (S3)
@@ -181,6 +200,9 @@ out as `YYYY-MM`.
 |---|---|---|---|
 | GET | `/v1/curtailment/subsystems?source=&start=&end=&subsystem=` | Public | `{"items": [subsystem_monthly_curtailment row]}` ordered by `month`, `subsystem`; `source` defaults to `total`; `start`/`end` as `YYYY-MM`; optional `subsystem` (`N`, `NE`, `S`, `SE`, `SIN`; all of them without it) |
 | GET | `/v1/curtailment/states/{state}?source=&month=` | Public | `{"series": [state_monthly_curtailment rows], "ranking": [RankedPlant], "ranking_month": "YYYY-MM" or null}`; ranking of `month` (default: latest month with data for the state; `null` when there is none), top 20. `state` accepts lowercase; 404 when it is not a Brazilian state, 422 when it is not two letters |
+| GET | `/v1/system/balance?subsystem=&from=&to=` | Public | `{"date_from", "date_to", "points": [subsystem_hourly_balance row]}`, hourly, at most 31 days (422 above); `from`/`to` as `YYYY-MM-DD`, default the last 7 days with data |
+| GET | `/v1/system/generation?subsystem=&from=&to=` | Public | `{"points": [subsystem_monthly_generation row]}`; `subsystem` defaults to `SIN`; `from`/`to` as `YYYY-MM`, default the last 12 months |
+| GET | `/v1/plants/{slug}/generation?from=&to=` | Public | `{"plant": power_plant, "points": [plant_monthly_generation row]}`; 404 for an unknown slug |
 | GET | `/v1/plants?search=&state=&source=&kind=&page=1&page_size=20` | Public | `{"items": [PlantSummary], "total": n, "page": p, "page_size": s}`; `page` ≥ 1, `page_size` from 1 to 100 |
 | GET | `/v1/plants/{slug}` | Public | `{"plant": Plant, "cluster": PlantSummary|null, "cluster_plants": [PlantSummary], "series": [plant_monthly_curtailment rows]}` |
 | GET | `/v1/ranking?month=&state=&source=&limit=20` | Public | `{"month": "YYYY-MM" or null, "items": [RankedPlant]}` (`limit` ≤ 100; `month` defaults to the latest month with data; `null` and an empty list when there is no data) |

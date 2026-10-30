@@ -301,6 +301,88 @@ class HourlyCurtailment(Base):
     days: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+GENERATION_SOURCES = "('hydro', 'thermal', 'wind', 'solar')"
+
+
+class SubsystemHourlyBalance(Base):
+    """Hourly energy balance per subsystem (ONS balanco_energia_subsistema_ho), in average MW."""
+
+    __tablename__ = "subsystem_hourly_balance"
+    __table_args__ = (
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),
+        Index("ix_subsystem_hourly_balance_hour", "hour"),
+    )
+
+    hour: Mapped[datetime] = mapped_column(DateTime, primary_key=True)  # Brasilia time
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    hour_utc: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    hydro_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    thermal_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    wind_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    solar_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    load_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    net_interchange_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+
+
+class SubsystemMonthlyGeneration(Base):
+    __tablename__ = "subsystem_monthly_generation"
+    __table_args__ = (
+        CheckConstraint(f"source IN {GENERATION_SOURCES}", name="source"),
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE', 'SIN')", name="subsystem"),
+    )
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    source: Mapped[str] = mapped_column(Text, primary_key=True)
+    energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    avg_mw: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    peak_mw: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    share_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+
+
+class PowerPlant(Base):
+    """Every plant of the generation fleet (hydro, thermal, nuclear, wind, solar).
+
+    ``plant`` only holds the wind and solar plants of the curtailment product, so the fleet lives
+    in its own table. Wind and solar plants keep the same id and slug rule as in ``plant``.
+    """
+
+    __tablename__ = "power_plant"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('hydro', 'thermal', 'nuclear', 'wind', 'solar', 'other')",
+            name="source_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    source_type: Mapped[str] = mapped_column(Text, nullable=False)
+    fuel_type: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[str | None] = mapped_column(CHAR(2))
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    ceg: Mapped[str | None] = mapped_column(Text)
+    capacity_mw: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    updated_at: Mapped[datetime] = _now_default()
+
+
+class PlantMonthlyGeneration(Base):
+    __tablename__ = "plant_monthly_generation"
+    __table_args__ = (
+        CheckConstraint(
+            "capacity_factor IS NULL OR capacity_factor BETWEEN 0 AND 1.05", name="capacity_factor"
+        ),
+    )
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    plant_id: Mapped[str] = mapped_column(Text, ForeignKey("power_plant.id"), primary_key=True)
+    energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    avg_mw: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    peak_mw: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    capacity_factor: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+
+
 class Member(Base):
     __tablename__ = "member"
     __table_args__ = (
@@ -447,6 +529,8 @@ for _name in (
     "subsystem_monthly_curtailment",
     "hourly_curtailment",
     "monthly_report",
+    "subsystem_monthly_generation",
+    "plant_monthly_generation",
 ):
     _table = Base.metadata.tables[_name]
     _table.append_constraint(
