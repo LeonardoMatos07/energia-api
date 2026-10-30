@@ -171,6 +171,24 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
 - `plant_monthly_generation`: PK `(month, plant_id)`, FK `power_plant.id`; `energy_mwh`,
   `avg_mw`, `peak_mw`, `capacity_factor` (energy / (capacity x hours of the month), 0 to 1.05).
 
+### Interchange and thermal dispatch (migration 0009)
+- `interchange_hourly`: PK `(hour, origin, destination)`, `scope` (`national` between subsystems,
+  `international` from `BR` to a country in upper case), `hour_utc`, `flow_mw_avg`,
+  `scheduled_mw_avg`. **Positive flow means origin to destination**; the ONS reports national
+  flows as origin/destination pairs (a negative value is a flow in the opposite direction) and
+  international ones as the flow to the destination country (negative is an import).
+- `interchange_monthly`: PK `(month, origin, destination)`; `energy_mwh` (net, signed),
+  `scheduled_energy_mwh`, `avg_mw`, `peak_mw`, `min_mw`. The ONS dictionaries carry no
+  transmission limit, so there is no "hours at limit" column.
+- `thermal_dispatch_monthly`: PK `(month, plant_code, reason)`; `plant_code` is the planning code
+  (`cod_usinaplanejamento`), plus `plant_name`, `ceg`, `fuel_type`, `subsystem`, `verified_mwh`,
+  `programmed_mwh`. `reason` is one of `total`, `merit_order`,
+  `merit_order_above_inflexibility`, `inflexibility`, `inflexibility_in_merit`,
+  `inflexibility_pure`, `electrical_reason`, `energy_security`, `gfom`, `loss_replacement`,
+  `export`, `power_reserve`, `gsub`, `unit_commitment`, `constrained_off`. Reasons **overlap**
+  (merit order contains its above-inflexibility part; inflexibility is split in two), so only
+  read them one at a time or against `total`.
+
 ### How `spillway-data` writes
 - `plant`: upsert by `id`.
 - `*_monthly_curtailment`: for each processed month, deletes the rows of that `month` and
@@ -178,6 +196,8 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
 - `load_run`: one row per source and month, plus one `aggregates` row per month.
 - `power_plant`: upsert by `id`. `subsystem_monthly_generation`, `plant_monthly_generation`: same
   delete-and-insert by `month`. `subsystem_hourly_balance`: delete-and-insert by `hour` range.
+- `interchange_hourly`: delete-and-insert by `hour` range; `interchange_monthly` and
+  `thermal_dispatch_monthly`: by `month`.
 - Its own database user, with `SELECT, INSERT, UPDATE, DELETE` on these tables only.
 
 ## Data lake (S3)
@@ -202,6 +222,9 @@ out as `YYYY-MM`.
 | GET | `/v1/curtailment/states/{state}?source=&month=` | Public | `{"series": [state_monthly_curtailment rows], "ranking": [RankedPlant], "ranking_month": "YYYY-MM" or null}`; ranking of `month` (default: latest month with data for the state; `null` when there is none), top 20. `state` accepts lowercase; 404 when it is not a Brazilian state, 422 when it is not two letters |
 | GET | `/v1/system/balance?subsystem=&from=&to=` | Public | `{"date_from", "date_to", "points": [subsystem_hourly_balance row]}`, hourly, at most 31 days (422 above); `from`/`to` as `YYYY-MM-DD`, default the last 7 days with data |
 | GET | `/v1/system/generation?subsystem=&from=&to=` | Public | `{"points": [subsystem_monthly_generation row]}`; `subsystem` defaults to `SIN`; `from`/`to` as `YYYY-MM`, default the last 12 months |
+| GET | `/v1/system/interchange?origin=&destination=&scope=&from=&to=` | Public | `{"points": [interchange_monthly row]}`; `from`/`to` as `YYYY-MM`, default the last 12 months |
+| GET | `/v1/system/interchange/hourly?origin=&destination=&from=&to=` | Public | `{"date_from", "date_to", "points": [interchange_hourly row]}`, at most 31 days |
+| GET | `/v1/system/thermal-dispatch?subsystem=&reason=&plant=&from=&to=` | Public | `{"points": [...]}` summed per month, subsystem and reason (`plants` = how many plants), or per plant when `plant` (a `plant_code`) is given |
 | GET | `/v1/plants/{slug}/generation?from=&to=` | Public | `{"plant": power_plant, "points": [plant_monthly_generation row]}`; 404 for an unknown slug |
 | GET | `/v1/plants?search=&state=&source=&kind=&page=1&page_size=20` | Public | `{"items": [PlantSummary], "total": n, "page": p, "page_size": s}`; `page` ≥ 1, `page_size` from 1 to 100 |
 | GET | `/v1/plants/{slug}` | Public | `{"plant": Plant, "cluster": PlantSummary|null, "cluster_plants": [PlantSummary], "series": [plant_monthly_curtailment rows]}` |
