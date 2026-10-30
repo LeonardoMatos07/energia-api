@@ -492,8 +492,8 @@ class SubsystemStorageDaily(Base):
 class ReservoirDaily(Base):
     __tablename__ = "reservoir_daily"
     __table_args__ = (
-        # above 100 while a reservoir spills over its nominal maximum (the ONS shows up to ~170)
-        CheckConstraint("storage_pct IS NULL OR storage_pct BETWEEN 0 AND 200", name="storage_pct"),
+        # no range check on storage_pct: it is negative below the minimum operating volume and
+        # above 100 while a reservoir spills (the ONS shows -83% to 379%)
         Index("ix_reservoir_daily_reservoir_id_day", "reservoir_id", "day"),
     )
 
@@ -530,6 +530,118 @@ class PlantMonthlySpilledEnergy(Base):
     agent: Mapped[str | None] = mapped_column(Text)
     spilled_energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
     spilled_turbinable_energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+
+
+class TransmissionLine(Base):
+    """A transmission line of the ONS grid register, versioned by snapshot.
+
+    A new row is written when an attribute changes: ``valid_from`` is the snapshot date that first
+    showed this version and ``valid_to`` the snapshot date that no longer did (NULL = current).
+    """
+
+    __tablename__ = "transmission_line"
+    __table_args__ = (
+        Index(
+            "uq_transmission_line_current",
+            "equipment_code",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+            sqlite_where=text("valid_to IS NULL"),
+        ),
+        Index("ix_transmission_line_voltage_kv", "voltage_kv"),
+    )
+
+    equipment_code: Mapped[str] = mapped_column(Text, primary_key=True)
+    valid_from: Mapped[date] = mapped_column(Date, primary_key=True)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    row_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str | None] = mapped_column(Text)
+    voltage_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    line_type: Mapped[str | None] = mapped_column(Text)
+    network_type: Mapped[str | None] = mapped_column(Text)
+    owner_agent: Mapped[str | None] = mapped_column(Text)
+    from_substation: Mapped[str | None] = mapped_column(Text)
+    to_substation: Mapped[str | None] = mapped_column(Text)
+    from_subsystem: Mapped[str | None] = mapped_column(String(3))
+    to_subsystem: Mapped[str | None] = mapped_column(String(3))
+    from_state: Mapped[str | None] = mapped_column(String(3))
+    to_state: Mapped[str | None] = mapped_column(String(3))
+    length_km: Mapped[Decimal | None] = mapped_column(Numeric(9, 3))
+    positive_seq_resistance: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    positive_seq_reactance: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    positive_seq_shunt: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    capacity_long_no_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    capacity_long_with_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    capacity_short_no_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    capacity_short_with_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    commissioned_on: Mapped[date | None] = mapped_column(Date)
+    decommissioned_on: Mapped[date | None] = mapped_column(Date)
+    planned_on: Mapped[date | None] = mapped_column(Date)
+    from_bus: Mapped[int | None] = mapped_column(Integer)
+    to_bus: Mapped[int | None] = mapped_column(Integer)
+
+
+class Substation(Base):
+    """A substation station (one voltage level of a substation), versioned like the lines."""
+
+    __tablename__ = "substation"
+    __table_args__ = (
+        Index(
+            "uq_substation_current",
+            "station_id",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+            sqlite_where=text("valid_to IS NULL"),
+        ),
+        Index("ix_substation_state", "state"),
+    )
+
+    station_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    valid_from: Mapped[date] = mapped_column(Date, primary_key=True)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    row_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    substation_id: Mapped[str | None] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)
+    voltage_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    state: Mapped[str | None] = mapped_column(String(3))
+    main_agent: Mapped[str | None] = mapped_column(Text)
+    bus_number: Mapped[int | None] = mapped_column(Integer)
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))  # as published by the ONS
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+
+
+class TransformerCapacity(Base):
+    __tablename__ = "transformer_capacity"
+    __table_args__ = (
+        Index(
+            "uq_transformer_capacity_current",
+            "equipment_code",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+            sqlite_where=text("valid_to IS NULL"),
+        ),
+    )
+
+    equipment_code: Mapped[str] = mapped_column(Text, primary_key=True)
+    valid_from: Mapped[date] = mapped_column(Date, primary_key=True)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    row_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str | None] = mapped_column(Text)
+    transformer_type: Mapped[str | None] = mapped_column(Text)
+    substation: Mapped[str | None] = mapped_column(Text)
+    owner_agent: Mapped[str | None] = mapped_column(Text)
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    state: Mapped[str | None] = mapped_column(String(3))
+    primary_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    secondary_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    tertiary_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    rated_mva: Mapped[Decimal | None] = mapped_column(Numeric(9, 2))
+    network_type: Mapped[str | None] = mapped_column(Text)
+    commissioned_on: Mapped[date | None] = mapped_column(Date)
+    decommissioned_on: Mapped[date | None] = mapped_column(Date)
+    primary_bus: Mapped[int | None] = mapped_column(Integer)
+    secondary_bus: Mapped[int | None] = mapped_column(Integer)
 
 
 class Member(Base):
