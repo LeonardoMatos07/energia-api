@@ -923,6 +923,8 @@ class SubstationListResponse(BaseModel):
     page: int
     page_size: int
     items: list[SubstationItem]
+
+
 NewsStatus = Literal["published", "hidden", "removed_on_request"]
 
 
