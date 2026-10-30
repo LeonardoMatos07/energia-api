@@ -1119,3 +1119,35 @@ class ReliabilityDetailResponse(BaseModel):
     distributor: ReliabilityDistributor
     source: DataSourceInfo
     points: list[ReliabilityMonthPoint]
+
+
+class TariffFlagPoint(_Orm):
+    month: date
+    flag: str
+    additional_brl_per_mwh: float
+
+
+class TariffFlagsResponse(BaseModel):
+    """Tariff flags month by month. The charge is on top of the homologated tariff, before taxes."""
+
+    source: DataSourceInfo
+    items: list[TariffFlagPoint]
+
+
+class MarketConsumptionPoint(_Orm):
+    month: date
+    regulated_mw_avg: float
+    free_mw_avg: float
+    free_share_pct: float
+
+
+class MarketAgentsPoint(_Orm):
+    month: date
+    agent_class: str
+    agents: int
+
+
+class MarketConsumptionResponse(BaseModel):
+    source: DataSourceInfo
+    consumption: list[MarketConsumptionPoint]
+    agents: list[MarketAgentsPoint]

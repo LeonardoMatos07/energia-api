@@ -414,3 +414,24 @@ the original files in the lake under `bronze/ccee/` and `bronze/aneel/reliabilit
 | GET | `/v1/reliability/{cnpj}?year=` | Public | Monthly DEC and FEC of one distributor |
 
 Cache tags `market` and `reliability` can be passed to `POST /v1/admin/revalidate`.
+
+### Tariff flags and the free market (migration 0015)
+
+Written by `spillway-data`, read by the API. Their sources are seeded in `data_source`
+(`aneel-tariff-flags`, ODbL 1.0; `ccee-market`, CC BY 4.0).
+
+- `tariff_flag_monthly`: PK `month`; `flag` (`Verde`, `Amarela`, `Vermelha P1`, `Vermelha P2`,
+  `Escassez Hídrica`) and `additional_brl_per_mwh`. The unit is **R$ per MWh** (inferred: the
+  ANEEL dictionary does not state it, and `18.85` for the yellow flag matches R$ 1,885 per 100 kWh).
+  It is charged on top of the homologated tariff, before taxes: it is not the electricity bill.
+- `market_consumption_monthly`: PK `month`; `regulated_mw_avg` (ACR) and `free_mw_avg` (ACL), average
+  MW (CCEE, 2023 on).
+- `market_agents_monthly`: PK `(month, agent_class)`; `agents` (CCEE, 2023 on). Market-wide counts per
+  class, never per agent.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/v1/tariffs/flags?from=&to=` | Public | `{"source", "items": [{"month", "flag", "additional_brl_per_mwh"}]}` |
+| GET | `/v1/market/consumption` | Public | `{"source", "consumption": [{"month", "regulated_mw_avg", "free_mw_avg", "free_share_pct"}], "agents": [...]}` |
+
+Both use the `market` cache tag.

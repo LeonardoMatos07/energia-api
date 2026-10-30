@@ -1009,3 +1009,38 @@ class ReliabilityMonthly(Base):
     fec_count: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     dec_limit_hours: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     fec_limit_count: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+
+
+class TariffFlagMonthly(Base):
+    """Tariff flag in force each month (ANEEL) and its additional charge, in R$ per MWh."""
+
+    __tablename__ = "tariff_flag_monthly"
+    __table_args__ = (CheckConstraint("additional_brl_per_mwh >= 0", name="additional"),)
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    flag: Mapped[str] = mapped_column(Text)
+    additional_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+
+
+class MarketConsumptionMonthly(Base):
+    """Consumption in the regulated (ACR) and free (ACL) markets, average MW (CCEE)."""
+
+    __tablename__ = "market_consumption_monthly"
+    __table_args__ = (
+        CheckConstraint("regulated_mw_avg >= 0 AND free_mw_avg >= 0", name="positive"),
+    )
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    regulated_mw_avg: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+    free_mw_avg: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+
+
+class MarketAgentsMonthly(Base):
+    """Number of agents per class in the electricity market (CCEE)."""
+
+    __tablename__ = "market_agents_monthly"
+    __table_args__ = (CheckConstraint("agents >= 0", name="agents"),)
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    agent_class: Mapped[str] = mapped_column(Text, primary_key=True)
+    agents: Mapped[int] = mapped_column(Integer)
