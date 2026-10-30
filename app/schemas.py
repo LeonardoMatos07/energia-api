@@ -1151,3 +1151,32 @@ class MarketConsumptionResponse(BaseModel):
     source: DataSourceInfo
     consumption: list[MarketConsumptionPoint]
     agents: list[MarketAgentsPoint]
+
+
+class GeoStateCurtailment(_Orm):
+    state: str
+    curtailment_pct: float | None
+    curtailed_mwh: float
+    verified_generation_mwh: float
+    estimated_loss_brl: float | None
+    affected_plants: int
+
+
+class GeoStatesMeta(_Orm):
+    """Where a map layer comes from; `omitted` counts the states that could not be drawn."""
+
+    source_name: str
+    source_url: str
+    license: str
+    data_source: AggregateSource
+    month: Month | None
+    months: list[Month]
+    updated_at: datetime | None
+    warnings: list[str]
+    omitted: int
+    omitted_states: list[str]
+
+
+class GeoStatesResponse(_Orm):
+    meta: GeoStatesMeta
+    items: list[GeoStateCurtailment]

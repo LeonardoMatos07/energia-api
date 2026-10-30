@@ -3017,6 +3017,75 @@
         }
       }
     },
+    "/v1/geo/states/curtailment": {
+      "get": {
+        "tags": [
+          "geo"
+        ],
+        "summary": "States Curtailment",
+        "description": "Curtailment of one month per state. Same data as `/v1/curtailment/states/{state}`.",
+        "operationId": "states_curtailment_v1_geo_states_curtailment_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "wind",
+                "solar",
+                "total"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-09"
+              ],
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeoStatesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/market/pld": {
       "get": {
         "tags": [
@@ -6303,6 +6372,174 @@
           "count"
         ],
         "title": "FunnelStep"
+      },
+      "GeoStateCurtailment": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "curtailment_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curtailment Pct"
+          },
+          "curtailed_mwh": {
+            "type": "number",
+            "title": "Curtailed Mwh"
+          },
+          "verified_generation_mwh": {
+            "type": "number",
+            "title": "Verified Generation Mwh"
+          },
+          "estimated_loss_brl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Loss Brl"
+          },
+          "affected_plants": {
+            "type": "integer",
+            "title": "Affected Plants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "curtailment_pct",
+          "curtailed_mwh",
+          "verified_generation_mwh",
+          "estimated_loss_brl",
+          "affected_plants"
+        ],
+        "title": "GeoStateCurtailment"
+      },
+      "GeoStatesMeta": {
+        "properties": {
+          "source_name": {
+            "type": "string",
+            "title": "Source Name"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "license": {
+            "type": "string",
+            "title": "License"
+          },
+          "data_source": {
+            "type": "string",
+            "enum": [
+              "wind",
+              "solar",
+              "total"
+            ],
+            "title": "Data Source"
+          },
+          "month": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "examples": [
+                  "2026-09"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Month"
+          },
+          "months": {
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "examples": [
+                "2026-09"
+              ]
+            },
+            "type": "array",
+            "title": "Months"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "omitted": {
+            "type": "integer",
+            "title": "Omitted"
+          },
+          "omitted_states": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Omitted States"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_name",
+          "source_url",
+          "license",
+          "data_source",
+          "month",
+          "months",
+          "updated_at",
+          "warnings",
+          "omitted",
+          "omitted_states"
+        ],
+        "title": "GeoStatesMeta",
+        "description": "Where a map layer comes from; `omitted` counts the states that could not be drawn."
+      },
+      "GeoStatesResponse": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/GeoStatesMeta"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GeoStateCurtailment"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta",
+          "items"
+        ],
+        "title": "GeoStatesResponse"
       },
       "GroupRankingResponse": {
         "properties": {
