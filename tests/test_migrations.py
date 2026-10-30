@@ -47,6 +47,11 @@ TABLES = {
     "news_source",
     "news_item",
     "regulatory_act",
+    "flag_rule_month",
+    "flag_forecast_run",
+    "flag_forecast_prob",
+    "flag_forecast_input",
+    "flag_forecast_score",
 }
 
 

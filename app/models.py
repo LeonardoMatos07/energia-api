@@ -785,6 +785,126 @@ class ForecastHourly(Base):
     )
 
 
+FLAG_NAMES_SQL = "('Verde', 'Amarela', 'Vermelha P1', 'Vermelha P2', 'Escassez Hídrica')"
+FORECAST_FLAGS_SQL = "('Verde', 'Amarela', 'Vermelha P1', 'Vermelha P2')"
+
+
+class FlagRuleMonth(Base):
+    """Inputs and bands of the tariff-flag rule for one month, as published by CCEE (InfoBandeira).
+
+    Written by the pipeline (``energia_data``). Only numeric facts and the bulletin reference are
+    stored, never the bulletin file itself.
+    """
+
+    __tablename__ = "flag_rule_month"
+    __table_args__ = (
+        CheckConstraint("pld_min_brl_per_mwh <= pld_max_brl_per_mwh", name="pld_range"),
+        CheckConstraint(
+            "green_upper_brl_per_mwh <= yellow_upper_brl_per_mwh "
+            "AND yellow_upper_brl_per_mwh <= red1_upper_brl_per_mwh "
+            "AND red1_upper_brl_per_mwh <= pld_max_brl_per_mwh",
+            name="band_order",
+        ),
+        CheckConstraint(f"flag IN {FLAG_NAMES_SQL}", name="flag"),
+    )
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    rule_version: Mapped[str] = mapped_column(Text, nullable=False)
+    pld_min_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    pld_max_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    gh_mwmed: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    gf_mwmed: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    gsf: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False)
+    pld_trigger_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    gfom_mwmed: Mapped[Decimal] = mapped_column(
+        Numeric(12, 3), nullable=False, default=0, server_default=text("0")
+    )
+    green_upper_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    yellow_upper_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    red1_upper_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    flag: Mapped[str] = mapped_column(Text, nullable=False)
+    bulletin_number: Mapped[int | None] = mapped_column(Integer)
+    bulletin_url: Mapped[str | None] = mapped_column(Text)
+    bulletin_published_on: Mapped[date | None] = mapped_column(Date)
+    revised_on: Mapped[date | None] = mapped_column(Date)
+    updated_at: Mapped[datetime] = _now_default()
+
+
+class FlagForecastRun(Base):
+    """One forecast of a month's flag at a given lead. Readers only see ``status = 'ready'``."""
+
+    __tablename__ = "flag_forecast_run"
+    __table_args__ = (
+        CheckConstraint("status IN ('loading', 'ready')", name="status"),
+        CheckConstraint("lead_days > 0", name="lead_days"),
+        UniqueConstraint("target_month", "lead_days", "generated_at", name="uq_flag_forecast_run"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntId, Identity(), primary_key=True)
+    target_month: Mapped[date] = mapped_column(Date, nullable=False)
+    lead_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    data_through: Mapped[date] = mapped_column(Date, nullable=False)
+    model_version: Mapped[str] = mapped_column(Text, nullable=False)
+    rule_version: Mapped[str] = mapped_column(Text, nullable=False)
+    trigger_p10_brl_per_mwh: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    trigger_p50_brl_per_mwh: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    trigger_p90_brl_per_mwh: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+Index("ix_flag_forecast_run_target", FlagForecastRun.target_month, FlagForecastRun.lead_days)
+
+
+class FlagForecastProb(Base):
+    """Probability of each flag in a run, with the band of that flag used for the run."""
+
+    __tablename__ = "flag_forecast_prob"
+    __table_args__ = (
+        CheckConstraint(f"flag IN {FORECAST_FLAGS_SQL}", name="flag"),
+        CheckConstraint("prob BETWEEN 0 AND 1", name="prob_range"),
+    )
+
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("flag_forecast_run.id", ondelete="CASCADE"), primary_key=True
+    )
+    flag: Mapped[str] = mapped_column(Text, primary_key=True)
+    prob: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    band_lower_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    band_upper_brl_per_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+
+
+class FlagForecastInput(Base):
+    """Key inputs of a run (values, dates, sources), kept as JSON for audit."""
+
+    __tablename__ = "flag_forecast_input"
+
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("flag_forecast_run.id", ondelete="CASCADE"), primary_key=True
+    )
+    inputs: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False)
+
+
+class FlagForecastScore(Base):
+    """Scoreboard row, written after the official flag is announced. Never rewritten."""
+
+    __tablename__ = "flag_forecast_score"
+    __table_args__ = (
+        CheckConstraint(f"actual_flag IN {FORECAST_FLAGS_SQL}", name="actual_flag"),
+        CheckConstraint("prob_actual BETWEEN 0 AND 1", name="prob_actual_range"),
+        CheckConstraint("brier >= 0", name="brier"),
+    )
+
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("flag_forecast_run.id", ondelete="CASCADE"), primary_key=True
+    )
+    actual_flag: Mapped[str] = mapped_column(Text, nullable=False)
+    prob_actual: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    brier: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False)
+    top_hit: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    scored_at: Mapped[datetime] = _now_default()
+
+
 for _name in (
     "plant_monthly_curtailment",
     "state_monthly_curtailment",
