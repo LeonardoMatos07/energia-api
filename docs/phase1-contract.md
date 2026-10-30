@@ -198,6 +198,49 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
   (merit order contains its above-inflexibility part; inflexibility is split in two), so only
   read them one at a time or against `total`.
 
+### Hydrology tables (migration 0010)
+Energy stored in reservoirs (EAR) is in **MW-month** (`_mw_month`), natural inflow energy (ENA) in
+average MW (`_mw_avg`) and as a percentage of the long-term average (`_pct_mlt`); flows are in
+m3/s (`_m3s`) and levels in metres (`_m`).
+- `reservoir`: the register (`id` PK = ONS `res_id`, `name`, `slug` unique, `reservoir_type`,
+  `planning_code`, `station_code`, `plant_name`, `ceg`, `subsystem`, `ree`, `basin`, `river`,
+  `commissioned_on`, levels, volumes in hm3, `latitude`, `longitude`). Snapshot, upserted by `id`.
+- `subsystem_storage_daily`: PK `(day, subsystem)`; `storage_max_mw_month`, `storage_mw_month`,
+  `storage_pct` (0 to 100), `ena_gross_*`, `ena_storable_*`.
+- `reservoir_daily`: PK `(day, reservoir_id)`, FK `reservoir.id`; the same storage and ENA columns
+  (`storage_pct` has no range check: it is negative below the minimum operating volume and
+  above 100 while a reservoir spills; the ONS shows -83% to 379% in 2015)
+  per reservoir plus `useful_volume_pct`, `inflow_m3s`, `natural_inflow_m3s`, `outflow_m3s`,
+  `turbined_m3s`, `spilled_m3s`, `upstream_level_m`, `downstream_level_m`. The ONS uses three
+  reservoir codes: EAR and ENA use the planning code (`cod_resplanejamento`), the hydrological
+  data use `id_reservatorio` (= `res_id`); the register maps one to the other.
+- `plant_monthly_spilled_energy`: PK `(month, plant_code)` (`plant_code` is the ONS optimisation
+  code `cod_usina`), `plant_name`, `subsystem`, `basin`, `river`, `agent`, `spilled_energy_mwh`,
+  `spilled_turbinable_energy_mwh`. It does not join `power_plant` (different codes).
+
+### Grid register (migration 0011)
+Three tables with the ONS register of the grid. Each is **versioned by snapshot**: the pipeline
+reads the whole register once a month and writes a new row only when something changed, so the
+expansion of the grid can be replayed. `valid_from` is the snapshot date that first showed the
+version, `valid_to` the snapshot date that no longer did (`NULL` = current); a partial unique index
+guarantees one current version per item.
+- `transmission_line`: PK `(equipment_code, valid_from)`, `row_hash`, `name`, `voltage_kv`,
+  `line_type`, `network_type`, `owner_agent`, `from_substation`, `to_substation`, `from_subsystem`,
+  `to_subsystem` (`N`, `NE`, `S`, `SE` or `PY`, `AR`, `UY`, `VE` for interconnections),
+  `from_state`, `to_state`, `length_km`, `positive_seq_resistance`, `positive_seq_reactance`,
+  `positive_seq_shunt` (positive sequence values as published; the ONS does not state the unit),
+  the four contracted capacities in **ampere** (`capacity_long_no_limit_a`,
+  `capacity_long_with_limit_a`, `capacity_short_no_limit_a`, `capacity_short_with_limit_a`),
+  `commissioned_on`, `decommissioned_on`, `planned_on`, `from_bus`, `to_bus`. The eight seasonal
+  capacities of the file are not loaded.
+- `substation`: PK `(station_id, valid_from)` (a station is one voltage level of a substation),
+  `substation_id`, `name`, `voltage_kv`, `subsystem`, `state`, `main_agent`, `bus_number`,
+  `latitude`, `longitude`. The coordinates are the ones the ONS publishes (some are empty); nothing
+  is geocoded here.
+- `transformer_capacity`: PK `(equipment_code, valid_from)`, `name`, `transformer_type`,
+  `substation`, `owner_agent`, `subsystem`, `state`, `primary_kv`, `secondary_kv`, `tertiary_kv`,
+  `rated_mva`, `network_type`, dates and buses. No endpoint yet.
+
 ### How `spillway-data` writes
 - `plant`: upsert by `id`.
 - `*_monthly_curtailment`: for each processed month, deletes the rows of that `month` and
@@ -207,6 +250,11 @@ Written by `spillway-data` (`system` pipeline). Power values are **average MW** 
   delete-and-insert by `month`. `subsystem_hourly_balance`: delete-and-insert by `hour` range.
 - `interchange_hourly`: delete-and-insert by `hour` range; `interchange_monthly` and
   `thermal_dispatch_monthly`: by `month`.
+- `reservoir`: upsert by `id`. `subsystem_storage_daily` and `reservoir_daily`: delete-and-insert
+  by `day` range of the processed month; `plant_monthly_spilled_energy`: by `month`.
+- `transmission_line`, `substation`, `transformer_capacity`: versioned snapshots. Closes the
+  current rows that changed or disappeared (`valid_to` = snapshot date) and inserts the new or
+  changed ones, in one transaction; running the same snapshot date again gives the same result.
 - `news_item` / `regulatory_act`: upsert by `url` (or `(dou_url, content_hash)`), only the pipeline columns; `SELECT` on `news_source`.
 - Its own database user, with `SELECT, INSERT, UPDATE, DELETE` on these tables only.
 
@@ -235,6 +283,12 @@ out as `YYYY-MM`.
 | GET | `/v1/system/interchange?origin=&destination=&scope=&from=&to=` | Public | `{"points": [interchange_monthly row]}`; `from`/`to` as `YYYY-MM`, default the last 12 months |
 | GET | `/v1/system/interchange/hourly?origin=&destination=&from=&to=` | Public | `{"date_from", "date_to", "points": [interchange_hourly row]}`, at most 31 days |
 | GET | `/v1/system/thermal-dispatch?subsystem=&reason=&plant=&from=&to=` | Public | `{"points": [...]}` summed per month, subsystem and reason (`plants` = how many plants), or per plant when `plant` (a `plant_code`) is given |
+| GET | `/v1/hydro/subsystems?subsystem=&from=&to=` | Public | `{"date_from", "date_to", "points": [subsystem_storage_daily row]}`; days as `YYYY-MM-DD`, default the last 90 days of data, at most 366 |
+| GET | `/v1/hydro/reservoirs?subsystem=&basin=` | Public | `{"latest_day", "items": [reservoir + storage_pct and ena_storable_pct_mlt of the latest day]}` |
+| GET | `/v1/hydro/reservoirs/{slug}?from=&to=` | Public | `{"reservoir", "points": [reservoir_daily row]}`; 404 for an unknown slug |
+| GET | `/v1/hydro/spilled-energy?subsystem=&plant=&month=&limit=` | Public | `{"points": [plant_monthly_spilled_energy row]}` of one month (default the latest), largest turbinable energy first |
+| GET | `/v1/grid/lines?voltage_kv=&min_voltage_kv=&state=&subsystem=&as_of=&page=&page_size=` | Public | `{"as_of", "total", "page", "page_size", "items": [transmission_line version]}`, highest voltage first; `state`/`subsystem` match either end; without `as_of` only the current versions |
+| GET | `/v1/grid/substations?voltage_kv=&min_voltage_kv=&state=&subsystem=&as_of=&page=&page_size=` | Public | same envelope with `substation` versions |
 | GET | `/v1/plants/{slug}/generation?from=&to=` | Public | `{"plant": power_plant, "points": [plant_monthly_generation row]}`; 404 for an unknown slug |
 | GET | `/v1/plants?search=&state=&source=&kind=&page=1&page_size=20` | Public | `{"items": [PlantSummary], "total": n, "page": p, "page_size": s}`; `page` ≥ 1, `page_size` from 1 to 100 |
 | GET | `/v1/plants/{slug}` | Public | `{"plant": Plant, "cluster": PlantSummary|null, "cluster_plants": [PlantSummary], "series": [plant_monthly_curtailment rows]}` |

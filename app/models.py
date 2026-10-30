@@ -441,6 +441,209 @@ class ThermalDispatchMonthly(Base):
     programmed_mwh: Mapped[Decimal | None] = mapped_column(Numeric(16, 3))
 
 
+class Reservoir(Base):
+    """Reservoir register (ONS ``reservatorio``); ``id`` is the ONS res_id."""
+
+    __tablename__ = "reservoir"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    reservoir_type: Mapped[str | None] = mapped_column(Text)
+    planning_code: Mapped[int | None] = mapped_column(Integer)
+    station_code: Mapped[int | None] = mapped_column(Integer)
+    plant_name: Mapped[str | None] = mapped_column(Text)
+    ceg: Mapped[str | None] = mapped_column(Text)
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    ree: Mapped[str | None] = mapped_column(Text)
+    basin: Mapped[str | None] = mapped_column(Text)
+    river: Mapped[str | None] = mapped_column(Text)
+    commissioned_on: Mapped[date | None] = mapped_column(Date)
+    max_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    min_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    max_volume_hm3: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    min_volume_hm3: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    useful_volume_hm3: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    updated_at: Mapped[datetime] = _now_default()
+
+
+class SubsystemStorageDaily(Base):
+    """Daily stored energy (EAR, MW-month) and natural inflow energy (ENA, average MW)."""
+
+    __tablename__ = "subsystem_storage_daily"
+    __table_args__ = (
+        CheckConstraint("subsystem IN ('N', 'NE', 'S', 'SE')", name="subsystem"),
+        CheckConstraint("storage_pct IS NULL OR storage_pct BETWEEN 0 AND 100", name="storage_pct"),
+    )
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    subsystem: Mapped[str] = mapped_column(String(3), primary_key=True)
+    storage_max_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    ena_gross_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_gross_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    ena_storable_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_storable_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+
+
+class ReservoirDaily(Base):
+    __tablename__ = "reservoir_daily"
+    __table_args__ = (
+        # no range check on storage_pct: it is negative below the minimum operating volume and
+        # above 100 while a reservoir spills (the ONS shows -83% to 379%)
+        Index("ix_reservoir_daily_reservoir_id_day", "reservoir_id", "day"),
+    )
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    reservoir_id: Mapped[str] = mapped_column(Text, ForeignKey("reservoir.id"), primary_key=True)
+    storage_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_max_mw_month: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    storage_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    useful_volume_pct: Mapped[Decimal | None] = mapped_column(Numeric(8, 3))
+    ena_gross_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_gross_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    ena_storable_mw_avg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    ena_storable_pct_mlt: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    inflow_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    natural_inflow_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    outflow_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    turbined_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    spilled_m3s: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    upstream_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    downstream_level_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+
+
+class PlantMonthlySpilledEnergy(Base):
+    """Energy that was spilled although it could have been turbined (ONS energia vertida)."""
+
+    __tablename__ = "plant_monthly_spilled_energy"
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    plant_code: Mapped[str] = mapped_column(Text, primary_key=True)  # cod_usina (optimisation code)
+    plant_name: Mapped[str] = mapped_column(Text, nullable=False)
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    basin: Mapped[str | None] = mapped_column(Text)
+    river: Mapped[str | None] = mapped_column(Text)
+    agent: Mapped[str | None] = mapped_column(Text)
+    spilled_energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    spilled_turbinable_energy_mwh: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+
+
+class TransmissionLine(Base):
+    """A transmission line of the ONS grid register, versioned by snapshot.
+
+    A new row is written when an attribute changes: ``valid_from`` is the snapshot date that first
+    showed this version and ``valid_to`` the snapshot date that no longer did (NULL = current).
+    """
+
+    __tablename__ = "transmission_line"
+    __table_args__ = (
+        Index(
+            "uq_transmission_line_current",
+            "equipment_code",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+            sqlite_where=text("valid_to IS NULL"),
+        ),
+        Index("ix_transmission_line_voltage_kv", "voltage_kv"),
+    )
+
+    equipment_code: Mapped[str] = mapped_column(Text, primary_key=True)
+    valid_from: Mapped[date] = mapped_column(Date, primary_key=True)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    row_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str | None] = mapped_column(Text)
+    voltage_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    line_type: Mapped[str | None] = mapped_column(Text)
+    network_type: Mapped[str | None] = mapped_column(Text)
+    owner_agent: Mapped[str | None] = mapped_column(Text)
+    from_substation: Mapped[str | None] = mapped_column(Text)
+    to_substation: Mapped[str | None] = mapped_column(Text)
+    from_subsystem: Mapped[str | None] = mapped_column(String(3))
+    to_subsystem: Mapped[str | None] = mapped_column(String(3))
+    from_state: Mapped[str | None] = mapped_column(String(3))
+    to_state: Mapped[str | None] = mapped_column(String(3))
+    length_km: Mapped[Decimal | None] = mapped_column(Numeric(9, 3))
+    positive_seq_resistance: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    positive_seq_reactance: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    positive_seq_shunt: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    capacity_long_no_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    capacity_long_with_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    capacity_short_no_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    capacity_short_with_limit_a: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    commissioned_on: Mapped[date | None] = mapped_column(Date)
+    decommissioned_on: Mapped[date | None] = mapped_column(Date)
+    planned_on: Mapped[date | None] = mapped_column(Date)
+    from_bus: Mapped[int | None] = mapped_column(Integer)
+    to_bus: Mapped[int | None] = mapped_column(Integer)
+
+
+class Substation(Base):
+    """A substation station (one voltage level of a substation), versioned like the lines."""
+
+    __tablename__ = "substation"
+    __table_args__ = (
+        Index(
+            "uq_substation_current",
+            "station_id",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+            sqlite_where=text("valid_to IS NULL"),
+        ),
+        Index("ix_substation_state", "state"),
+    )
+
+    station_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    valid_from: Mapped[date] = mapped_column(Date, primary_key=True)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    row_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    substation_id: Mapped[str | None] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)
+    voltage_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    state: Mapped[str | None] = mapped_column(String(3))
+    main_agent: Mapped[str | None] = mapped_column(Text)
+    bus_number: Mapped[int | None] = mapped_column(Integer)
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))  # as published by the ONS
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+
+
+class TransformerCapacity(Base):
+    __tablename__ = "transformer_capacity"
+    __table_args__ = (
+        Index(
+            "uq_transformer_capacity_current",
+            "equipment_code",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+            sqlite_where=text("valid_to IS NULL"),
+        ),
+    )
+
+    equipment_code: Mapped[str] = mapped_column(Text, primary_key=True)
+    valid_from: Mapped[date] = mapped_column(Date, primary_key=True)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    row_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str | None] = mapped_column(Text)
+    transformer_type: Mapped[str | None] = mapped_column(Text)
+    substation: Mapped[str | None] = mapped_column(Text)
+    owner_agent: Mapped[str | None] = mapped_column(Text)
+    subsystem: Mapped[str | None] = mapped_column(String(3))
+    state: Mapped[str | None] = mapped_column(String(3))
+    primary_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    secondary_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    tertiary_kv: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    rated_mva: Mapped[Decimal | None] = mapped_column(Numeric(9, 2))
+    network_type: Mapped[str | None] = mapped_column(Text)
+    commissioned_on: Mapped[date | None] = mapped_column(Date)
+    decommissioned_on: Mapped[date | None] = mapped_column(Date)
+    primary_bus: Mapped[int | None] = mapped_column(Integer)
+    secondary_bus: Mapped[int | None] = mapped_column(Integer)
+
+
 class Member(Base):
     __tablename__ = "member"
     __table_args__ = (
@@ -591,6 +794,7 @@ for _name in (
     "plant_monthly_generation",
     "interchange_monthly",
     "thermal_dispatch_monthly",
+    "plant_monthly_spilled_energy",
 ):
     _table = Base.metadata.tables[_name]
     _table.append_constraint(
