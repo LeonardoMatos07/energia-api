@@ -80,6 +80,17 @@ PK `(plant_id, month)`. Indexes: `(month, national_rank)`, `(month, state_rank)`
 
 `spillway-forecast` (`spillway publish`, role `energia_forecast`) writes `forecast_model`, `forecast_run` and `forecast_hourly` in one transaction; the API only reads the latest run with `status = 'ready'`. Routes: `GET /v1/forecast?scope=&source=&days=`, `GET /v1/forecast/scopes`, `GET /v1/forecast/model` (public, short cache, `404` until something is published).
 
+### Flag forecast tables (migration `0016`; tariff-flag forecast spec, stage 1)
+
+Schema only: no route and no writer yet. Stage 0 discovery: `docs/flag-forecast-discovery.md` in `spillway-forecast`. Nothing here stores or serves the CCEE bulletin files, only numeric facts and the bulletin reference (number, URL, date).
+
+- `flag_rule_month` (PK `month`): one row per month, written by the pipeline (`energia_data`) from the InfoBandeira bulletin. `rule_version`, `pld_min_brl_per_mwh`, `pld_max_brl_per_mwh`, `gh_mwmed`, `gf_mwmed`, `gsf` (`numeric(4,2)`), `pld_trigger_brl_per_mwh` (official trigger), `gfom_mwmed` (default 0), `green_upper_brl_per_mwh`, `yellow_upper_brl_per_mwh`, `red1_upper_brl_per_mwh` (the red 2 upper limit is `pld_max_brl_per_mwh`), `flag` (same labels as `tariff_flag_monthly`), `bulletin_number`, `bulletin_url`, `bulletin_published_on`, `revised_on` (when ANEEL revised the colour after publishing), `updated_at`. Checks: PLD range and band order.
+- `flag_forecast_run` (`id` identity): `target_month`, `lead_days` (> 0), `generated_at`, `data_through`, `model_version`, `rule_version`, `trigger_p10/p50/p90_brl_per_mwh` (forecast trigger median and 80% interval), `status` (`loading`, `ready`). Unique `(target_month, lead_days, generated_at)`: forecasts are kept with their date, never rewritten. Readers only see `status = 'ready'`.
+- `flag_forecast_prob` (PK `(run_id, flag)`, `flag` in `Verde`, `Amarela`, `Vermelha P1`, `Vermelha P2`): `prob` 0..1 plus the band (`band_lower_brl_per_mwh`, `band_upper_brl_per_mwh`) used for that colour.
+- `flag_forecast_input` (PK `run_id`): `inputs` JSON with the key inputs of the run.
+- `flag_forecast_score` (PK `run_id`): `actual_flag`, `prob_actual`, `brier`, `top_hit`, `scored_at`, written after the official flag appears in `tariff_flag_monthly`.
+- Children cascade on `flag_forecast_run`. Writers: `energia_forecast` writes the four `flag_forecast_*` tables (insert/delete; `UPDATE` only of `flag_forecast_run.status`); `energia_data` writes `flag_rule_month`. No existing table was changed.
+
 ### News tables (`news_source`, `news_item`, `regulatory_act`)
 
 Public sector news, shown exactly as the source published it, always with the publisher, date, link and license.
